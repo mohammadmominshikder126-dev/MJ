@@ -1,0 +1,218 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isEmailVerified() && (
+        request.auth.token.email == 'sohelkhan65686@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidSiteConfig(data) {
+      return data.keys().hasAll([
+        'brandName',
+        'brandSubtitle',
+        'logoUrl',
+        'availabilityText',
+        'bannerGreeting',
+        'bannerHighlight',
+        'bannerSubtitle',
+        'bannerDescription',
+        'bannerImageUrl',
+        'whatsappNumber',
+        'whatsappGreeting',
+        'telegramGroupUrl',
+        'facebookUrl',
+        'youtubeUrl',
+        'githubUrl',
+        'linkedinUrl',
+        'updatedAt',
+        'updatedBy'
+      ]) && data.keys().hasOnly([
+        'brandName',
+        'brandSubtitle',
+        'logoUrl',
+        'availabilityText',
+        'bannerGreeting',
+        'bannerHighlight',
+        'bannerSubtitle',
+        'bannerDescription',
+        'bannerImageUrl',
+        'whatsappNumber',
+        'whatsappGreeting',
+        'telegramGroupUrl',
+        'facebookUrl',
+        'youtubeUrl',
+        'githubUrl',
+        'linkedinUrl',
+        'updatedAt',
+        'updatedBy'
+      ]) &&
+      data.brandName is string && data.brandName.size() >= 1 && data.brandName.size() <= 60 &&
+      data.brandSubtitle is string && data.brandSubtitle.size() >= 1 && data.brandSubtitle.size() <= 60 &&
+      data.logoUrl is string && data.logoUrl.size() <= 350000 &&
+      data.availabilityText is string && data.availabilityText.size() >= 1 && data.availabilityText.size() <= 80 &&
+      data.bannerGreeting is string && data.bannerGreeting.size() >= 1 && data.bannerGreeting.size() <= 60 &&
+      data.bannerHighlight is string && data.bannerHighlight.size() >= 1 && data.bannerHighlight.size() <= 60 &&
+      data.bannerSubtitle is string && data.bannerSubtitle.size() >= 1 && data.bannerSubtitle.size() <= 100 &&
+      data.bannerDescription is string && data.bannerDescription.size() >= 1 && data.bannerDescription.size() <= 300 &&
+      data.bannerImageUrl is string && data.bannerImageUrl.size() <= 350000 &&
+      data.whatsappNumber is string && data.whatsappNumber.size() >= 7 && data.whatsappNumber.size() <= 20 &&
+      data.whatsappNumber.matches('^[0-9+\\-\\s]{7,20}$') &&
+      data.whatsappGreeting is string && data.whatsappGreeting.size() >= 1 && data.whatsappGreeting.size() <= 160 &&
+      data.telegramGroupUrl is string && data.telegramGroupUrl.size() <= 240 &&
+      data.facebookUrl is string && data.facebookUrl.size() <= 240 &&
+      data.youtubeUrl is string && data.youtubeUrl.size() <= 240 &&
+      data.githubUrl is string && data.githubUrl.size() <= 240 &&
+      data.linkedinUrl is string && data.linkedinUrl.size() <= 240 &&
+      data.updatedAt is timestamp && data.updatedAt == request.time &&
+      data.updatedBy is string && data.updatedBy == request.auth.uid && data.updatedBy.size() <= 128;
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasAll([
+        'title',
+        'category',
+        'categoryLabel',
+        'description',
+        'longDescription',
+        'year',
+        'techStack',
+        'highlights',
+        'previewType',
+        'liveUrl',
+        'thumbnailUrl',
+        'authorId',
+        'createdAt',
+        'updatedAt'
+      ]) && data.keys().hasOnly([
+        'title',
+        'category',
+        'categoryLabel',
+        'description',
+        'longDescription',
+        'year',
+        'techStack',
+        'highlights',
+        'previewType',
+        'liveUrl',
+        'thumbnailUrl',
+        'authorId',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+      data.category is string && data.category in ['business', 'ecommerce', 'web-apps'] &&
+      data.categoryLabel is string && data.categoryLabel in ['Business', 'E-Commerce', 'Web Apps'] &&
+      data.description is string && data.description.size() >= 1 && data.description.size() <= 300 &&
+      data.longDescription is string && data.longDescription.size() >= 1 && data.longDescription.size() <= 1200 &&
+      data.year is string && data.year.size() >= 4 && data.year.size() <= 10 &&
+      data.techStack is list && data.techStack.size() >= 1 && data.techStack.size() <= 10 &&
+      data.techStack[0] is string && data.techStack[0].size() <= 40 &&
+      data.highlights is list && data.highlights.size() >= 1 && data.highlights.size() <= 12 &&
+      data.highlights[0] is string && data.highlights[0].size() <= 160 &&
+      data.previewType is string && data.previewType in ['portfolio', 'ecommerce', 'business', 'custom'] &&
+      data.liveUrl is string && data.liveUrl.size() <= 300 &&
+      data.thumbnailUrl is string && data.thumbnailUrl.size() <= 350000 &&
+      data.authorId is string && data.authorId.size() <= 128 &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    match /siteConfig/{configId} {
+      allow get: if configId == 'main';
+      allow list: if false;
+      allow create: if isAdmin() && configId == 'main' && isValidSiteConfig(incoming());
+      allow update: if isAdmin() && configId == 'main' && isValidSiteConfig(incoming()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'brandName',
+          'brandSubtitle',
+          'logoUrl',
+          'availabilityText',
+          'bannerGreeting',
+          'bannerHighlight',
+          'bannerSubtitle',
+          'bannerDescription',
+          'bannerImageUrl',
+          'whatsappNumber',
+          'whatsappGreeting',
+          'telegramGroupUrl',
+          'facebookUrl',
+          'youtubeUrl',
+          'githubUrl',
+          'linkedinUrl',
+          'updatedAt',
+          'updatedBy'
+        ]);
+      allow delete: if false;
+    }
+
+    match /projects/{projectId} {
+      allow get: if isValidId(projectId);
+      allow list: if resource.data.category in ['business', 'ecommerce', 'web-apps'];
+      allow create: if isAdmin() && isValidId(projectId) && isValidProject(incoming()) &&
+        incoming().authorId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(projectId) && isValidProject(incoming()) &&
+        incoming().authorId == existing().authorId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title',
+          'category',
+          'categoryLabel',
+          'description',
+          'longDescription',
+          'year',
+          'techStack',
+          'highlights',
+          'previewType',
+          'liveUrl',
+          'thumbnailUrl',
+          'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(projectId);
+    }
+
+    match /admins/{uid} {
+      allow get: if isValidId(uid) && ((isSignedIn() && request.auth.uid == uid) || isAdmin());
+      allow list: if false;
+      allow create: if isAdmin() && isValidId(uid) &&
+        incoming().keys().hasAll(['email', 'createdAt']) &&
+        incoming().keys().hasOnly(['email', 'createdAt']) &&
+        incoming().email is string && incoming().email.size() <= 160 &&
+        incoming().createdAt == request.time;
+      allow update, delete: if isAdmin() && isValidId(uid);
+    }
+
+    match /test/{docId} {
+      allow get: if docId == 'connection';
+      allow list, write: if false;
+    }
+  }
+}

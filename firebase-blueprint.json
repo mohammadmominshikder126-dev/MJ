@@ -1,0 +1,110 @@
+{
+  "entities": {
+    "SiteConfig": {
+      "title": "SiteConfig",
+      "description": "Global portfolio banner, logo, WhatsApp, and Telegram group configuration.",
+      "type": "object",
+      "properties": {
+        "brandName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "brandSubtitle": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "logoUrl": { "type": "string", "maxLength": 350000 },
+        "availabilityText": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "bannerGreeting": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "bannerHighlight": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "bannerSubtitle": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "bannerDescription": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "bannerImageUrl": { "type": "string", "maxLength": 350000 },
+        "whatsappNumber": { "type": "string", "minLength": 7, "maxLength": 20, "pattern": "^[0-9+\\-\\s]{7,20}$" },
+        "whatsappGreeting": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "telegramGroupUrl": { "type": "string", "maxLength": 240 },
+        "facebookUrl": { "type": "string", "maxLength": 240 },
+        "youtubeUrl": { "type": "string", "maxLength": 240 },
+        "githubUrl": { "type": "string", "maxLength": 240 },
+        "linkedinUrl": { "type": "string", "maxLength": 240 },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "required": [
+        "brandName",
+        "brandSubtitle",
+        "logoUrl",
+        "availabilityText",
+        "bannerGreeting",
+        "bannerHighlight",
+        "bannerSubtitle",
+        "bannerDescription",
+        "bannerImageUrl",
+        "whatsappNumber",
+        "whatsappGreeting",
+        "telegramGroupUrl",
+        "facebookUrl",
+        "youtubeUrl",
+        "githubUrl",
+        "linkedinUrl",
+        "updatedAt",
+        "updatedBy"
+      ]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Portfolio website project with category, description, features, live URL, and screenshot.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "category": { "type": "string", "enum": ["business", "ecommerce", "web-apps"] },
+        "categoryLabel": { "type": "string", "enum": ["Business", "E-Commerce", "Web Apps"] },
+        "description": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "longDescription": { "type": "string", "minLength": 1, "maxLength": 1200 },
+        "year": { "type": "string", "minLength": 4, "maxLength": 10 },
+        "techStack": { "type": "array", "description": "Up to 10 technology tags." },
+        "highlights": { "type": "array", "description": "Up to 12 website feature descriptions." },
+        "previewType": { "type": "string", "enum": ["portfolio", "ecommerce", "business", "custom"] },
+        "liveUrl": { "type": "string", "maxLength": 300 },
+        "thumbnailUrl": { "type": "string", "maxLength": 350000 },
+        "authorId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "title",
+        "category",
+        "categoryLabel",
+        "description",
+        "longDescription",
+        "year",
+        "techStack",
+        "highlights",
+        "previewType",
+        "liveUrl",
+        "thumbnailUrl",
+        "authorId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Authorized portfolio administrator record.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 160 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/siteConfig/{configId}": {
+      "schema": { "$ref": "#/entities/SiteConfig" },
+      "description": "Singleton public site configuration document (configId = 'main') writable only by verified Admin."
+    },
+    "/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "Portfolio website projects publicly readable and writable only by verified Admin."
+    },
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Admin role documents readable by owner/admin and writable only by existing admin."
+    }
+  }
+}
