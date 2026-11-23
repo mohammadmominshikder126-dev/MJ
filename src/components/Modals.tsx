@@ -19,9 +19,10 @@ interface ProjectModalProps {
   project: ProjectItem | null;
   siteConfig: SiteConfig;
   onClose: () => void;
+  onContactClick?: () => void;
 }
 
-export function ProjectModal({ project, siteConfig, onClose }: ProjectModalProps) {
+export function ProjectModal({ project, siteConfig, onClose, onContactClick }: ProjectModalProps) {
   useEffect(() => {
     if (!project) return;
     const handleKey = (e: KeyboardEvent) => {
@@ -133,6 +134,7 @@ export function ProjectModal({ project, siteConfig, onClose }: ProjectModalProps
             href={whatsappHref}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => onContactClick?.()}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#16a34a] to-[#059669] text-xs font-semibold text-white shadow-[0_6px_22px_rgba(16,185,129,0.35)] hover:brightness-110 transition-all whitespace-nowrap"
           >
             <MessageCircle className="w-3.5 h-3.5" />
@@ -148,9 +150,10 @@ interface InfoModalProps {
   mode: 'about' | 'privacy' | 'terms' | null;
   siteConfig: SiteConfig;
   onClose: () => void;
+  onContactClick?: () => void;
 }
 
-export function InfoModal({ mode, siteConfig, onClose }: InfoModalProps) {
+export function InfoModal({ mode, siteConfig, onClose, onContactClick }: InfoModalProps) {
   useEffect(() => {
     if (!mode) return;
     const handleKey = (e: KeyboardEvent) => {
@@ -245,6 +248,7 @@ export function InfoModal({ mode, siteConfig, onClose }: InfoModalProps) {
               href={whatsappHref}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => onContactClick?.()}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-[#16a34a] to-[#059669] text-xs font-semibold text-white hover:brightness-110 transition-all"
             >
               <MessageCircle className="w-3.5 h-3.5" />

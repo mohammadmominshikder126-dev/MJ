@@ -1,6 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore';
 import {
   ArrowRight,
   ArrowUp,
@@ -19,7 +18,7 @@ import {
   User,
   X,
 } from 'lucide-react';
-import { AdminPanelModal } from './components/AdminPanelModal';
+import { AdminDashboard, type AnalyticsOverview } from './components/AdminDashboard';
 import {
   FacebookIcon,
   GithubIcon,
@@ -45,9 +44,17 @@ import {
   SiteConfig,
   SkillItem,
 } from './lib/portfolioData';
-import { ADMIN_EMAIL, auth, db, handleFirestoreError, OperationType } from './lib/firebase';
+import { ADMIN_EMAIL, auth } from './lib/firebase';
 
 const ADMIN_ROUTE_PATH = '/Admin/login/mj';
+
+const EMPTY_ANALYTICS: AnalyticsOverview = {
+  totalVisitors: 0,
+  todayVisitors: 0,
+  totalContactClicks: 0,
+  todayContactClicks: 0,
+  dailyHistory: [],
+};
 
 function isAdminRoutePath(pathname: string): boolean {
   return pathname.replace(/\/+$/, '').toLowerCase() === '/admin/login/mj';
@@ -64,15 +71,14 @@ export default function App() {
   const [infoModal, setInfoModal] = useState<'about' | 'privacy' | 'terms' | null>(null);
 
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(DEFAULT_SITE_CONFIG);
-  const [firestoreProjects, setFirestoreProjects] = useState<ProjectItem[]>([]);
-  const [hasFirestoreProjects, setHasFirestoreProjects] = useState<boolean>(false);
-  const [firestoreSkills, setFirestoreSkills] = useState<SkillItem[]>([]);
-  const [hasFirestoreSkills, setHasFirestoreSkills] = useState<boolean>(false);
+  const [projects, setProjects] = useState<ProjectItem[]>(DEFAULT_PROJECTS);
+  const [skills, setSkills] = useState<SkillItem[]>(DEFAULT_SKILLS);
+  const [analytics, setAnalytics] = useState<AnalyticsOverview>(EMPTY_ANALYTICS);
+  const [analyticsLoading, setAnalyticsLoading] = useState<boolean>(false);
 
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isAdminUser, setIsAdminUser] = useState<boolean>(false);
   const [authReady, setAuthReady] = useState<boolean>(false);
-  const [adminOpen, setAdminOpen] = useState<boolean>(false);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [heroArtFailed, setHeroArtFailed] = useState(false);
@@ -115,7 +121,6 @@ export default function App() {
   };
 
   const navigateToHome = () => {
-    setAdminOpen(false);
     if (isAdminRoutePath(window.location.pathname)) {
       window.history.pushState({}, '', '/');
     }
@@ -123,184 +128,140 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'auto' });
   };
 
+  const loadPublicPortfolio = useCallback(async () => {
+    try {
+      const res = await fetch('/api/portfolio', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        siteConfig?: SiteConfig;
+        skills?: SkillItem[];
+        projects?: ProjectItem[];
+      };
+      if (data.siteConfig) {
+        setLogoImgFailed(false);
+        setHeroArtFailed(false);
+        setAboutLaptopFailed(false);
+        setSiteConfig(data.siteConfig);
+      }
+      if (Array.isArray(data.skills) && data.skills.length > 0) {
+        setSkills(data.skills);
+      }
+      if (Array.isArray(data.projects)) {
+        setProjects(data.projects);
+      }
+    } catch {
+      // Keep current state cleanly if transient network hiccup occurs
+    }
+  }, []);
+
+  const loadAdminOverview = useCallback(
+    async (activeUser: FirebaseUser | null) => {
+      if (!activeUser) return;
+      setAnalyticsLoading(true);
+      try {
+        const token = await activeUser.getIdToken();
+        const res = await fetch('/api/admin/overview', {
+          cache: 'no-store',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          siteConfig?: SiteConfig;
+          skills?: SkillItem[];
+          projects?: ProjectItem[];
+          analytics?: AnalyticsOverview;
+        };
+        if (data.siteConfig) setSiteConfig(data.siteConfig);
+        if (Array.isArray(data.skills)) setSkills(data.skills);
+        if (Array.isArray(data.projects)) setProjects(data.projects);
+        if (data.analytics) setAnalytics(data.analytics);
+      } catch {
+        // Handled cleanly in UI
+      } finally {
+        setAnalyticsLoading(false);
+      }
+    },
+    []
+  );
+
   // Firebase Auth listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
       setUser(nextUser);
       if (!nextUser) {
         setIsAdminUser(false);
+        setAnalytics(EMPTY_ANALYTICS);
         setAuthReady(true);
         return;
       }
-      if (nextUser.email === ADMIN_EMAIL && nextUser.emailVerified) {
-        setIsAdminUser(true);
-        setAuthReady(true);
-        return;
-      }
-      try {
-        const adminDoc = await getDoc(doc(db, 'admins', nextUser.uid));
-        setIsAdminUser(adminDoc.exists() && nextUser.emailVerified);
-      } catch {
-        setIsAdminUser(false);
-      } finally {
-        setAuthReady(true);
+      const authorized =
+        Boolean(nextUser.emailVerified) &&
+        nextUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+      setIsAdminUser(authorized);
+      setAuthReady(true);
+      if (authorized) {
+        void loadAdminOverview(nextUser);
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [loadAdminOverview]);
 
-  // Real-time Firestore listener: siteConfig/main (Full A-to-Z Site Controls)
+  // Initial Load + Real-Time Server-Sent Events Sync between Admin Panel & User Panel
   useEffect(() => {
-    const configRef = doc(db, 'siteConfig', 'main');
-    const unsubscribe = onSnapshot(
-      configRef,
-      (snap) => {
-        if (!snap.exists()) {
-          setSiteConfig(DEFAULT_SITE_CONFIG);
-          return;
-        }
-        const data = snap.data() as Partial<SiteConfig>;
-        setLogoImgFailed(false);
-        setHeroArtFailed(false);
-        setAboutLaptopFailed(false);
-        setSiteConfig({
-          brandName: data.brandName || DEFAULT_SITE_CONFIG.brandName,
-          brandSubtitle: data.brandSubtitle || DEFAULT_SITE_CONFIG.brandSubtitle,
-          logoUrl: data.logoUrl || '',
-          hireButtonText: data.hireButtonText || DEFAULT_SITE_CONFIG.hireButtonText,
-          availabilityText: data.availabilityText || DEFAULT_SITE_CONFIG.availabilityText,
-          bannerGreeting: data.bannerGreeting || DEFAULT_SITE_CONFIG.bannerGreeting,
-          bannerHighlight: data.bannerHighlight || DEFAULT_SITE_CONFIG.bannerHighlight,
-          bannerSubtitle: data.bannerSubtitle || DEFAULT_SITE_CONFIG.bannerSubtitle,
-          bannerDescription: data.bannerDescription || DEFAULT_SITE_CONFIG.bannerDescription,
-          bannerImageUrl: data.bannerImageUrl || DEFAULT_SITE_CONFIG.bannerImageUrl,
-          portfolioCtaText: data.portfolioCtaText || DEFAULT_SITE_CONFIG.portfolioCtaText,
-          contactCtaText: data.contactCtaText || DEFAULT_SITE_CONFIG.contactCtaText,
-          skillsHeading: data.skillsHeading || DEFAULT_SITE_CONFIG.skillsHeading,
-          portfolioHeading: data.portfolioHeading || DEFAULT_SITE_CONFIG.portfolioHeading,
-          portfolioSubheading: data.portfolioSubheading || DEFAULT_SITE_CONFIG.portfolioSubheading,
-          aboutTitle: data.aboutTitle || DEFAULT_SITE_CONFIG.aboutTitle,
-          aboutDescription: data.aboutDescription || DEFAULT_SITE_CONFIG.aboutDescription,
-          aboutImageUrl: data.aboutImageUrl || DEFAULT_SITE_CONFIG.aboutImageUrl,
-          quickCard1Title: data.quickCard1Title || DEFAULT_SITE_CONFIG.quickCard1Title,
-          quickCard1Subtitle: data.quickCard1Subtitle || DEFAULT_SITE_CONFIG.quickCard1Subtitle,
-          quickCard2Title: data.quickCard2Title || DEFAULT_SITE_CONFIG.quickCard2Title,
-          quickCard2Subtitle: data.quickCard2Subtitle || DEFAULT_SITE_CONFIG.quickCard2Subtitle,
-          quickCard3Title: data.quickCard3Title || DEFAULT_SITE_CONFIG.quickCard3Title,
-          quickCard3Subtitle: data.quickCard3Subtitle || DEFAULT_SITE_CONFIG.quickCard3Subtitle,
-          whatsappNumber: data.whatsappNumber || DEFAULT_SITE_CONFIG.whatsappNumber,
-          whatsappGreeting: data.whatsappGreeting || DEFAULT_SITE_CONFIG.whatsappGreeting,
-          telegramGroupUrl: data.telegramGroupUrl ?? DEFAULT_SITE_CONFIG.telegramGroupUrl,
-          facebookUrl: data.facebookUrl ?? DEFAULT_SITE_CONFIG.facebookUrl,
-          youtubeUrl: data.youtubeUrl ?? DEFAULT_SITE_CONFIG.youtubeUrl,
-          githubUrl: data.githubUrl ?? DEFAULT_SITE_CONFIG.githubUrl,
-          linkedinUrl: data.linkedinUrl ?? DEFAULT_SITE_CONFIG.linkedinUrl,
-          footerRightsText: data.footerRightsText || DEFAULT_SITE_CONFIG.footerRightsText,
-          footerCreditText: data.footerCreditText || DEFAULT_SITE_CONFIG.footerCreditText,
-          privacyPolicyText: data.privacyPolicyText || DEFAULT_SITE_CONFIG.privacyPolicyText,
-          termsText: data.termsText || DEFAULT_SITE_CONFIG.termsText,
-        });
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.GET, 'siteConfig/main');
-      }
-    );
-    return () => unsubscribe();
-  }, []);
+    void loadPublicPortfolio();
 
-  // Real-time Firestore listener: skills collection (matches firestore.rules allow list: resource.data.order >= 0)
-  useEffect(() => {
-    const skillsQuery = query(collection(db, 'skills'), where('order', '>=', 0));
-    const unsubscribe = onSnapshot(
-      skillsQuery,
-      (snapshot) => {
-        if (snapshot.empty) {
-          setFirestoreSkills([]);
-          setHasFirestoreSkills(false);
-          return;
+    let source: EventSource | null = null;
+    try {
+      source = new EventSource('/api/realtime');
+      source.addEventListener('update', () => {
+        void loadPublicPortfolio();
+        if (auth.currentUser && auth.currentUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+          void loadAdminOverview(auth.currentUser);
         }
-        const rows: SkillItem[] = snapshot.docs.map((docSnap) => {
-          const d = docSnap.data() as Record<string, unknown>;
-          return {
-            id: docSnap.id,
-            name: String(d.name || 'Skill'),
-            role: String(d.role || 'Web Development'),
-            iconKey: String(d.iconKey || 'custom'),
-            order: typeof d.order === 'number' ? d.order : 0,
-          };
-        });
-        rows.sort((a, b) => a.order - b.order);
-        setFirestoreSkills(rows);
-        setHasFirestoreSkills(true);
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'skills');
-      }
-    );
-    return () => unsubscribe();
-  }, []);
+      });
+    } catch {
+      // Fallback to focus listener below
+    }
 
-  // Real-time Firestore listener: projects collection
-  useEffect(() => {
-    const projectsQuery = query(
-      collection(db, 'projects'),
-      where('category', 'in', ['business', 'ecommerce', 'web-apps'])
-    );
-    const unsubscribe = onSnapshot(
-      projectsQuery,
-      (snapshot) => {
-        if (snapshot.empty) {
-          setFirestoreProjects([]);
-          setHasFirestoreProjects(false);
-          return;
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void loadPublicPortfolio();
+        if (auth.currentUser && auth.currentUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+          void loadAdminOverview(auth.currentUser);
         }
-        const rows: (ProjectItem & { sortMs: number })[] = snapshot.docs.map((docSnap) => {
-          const d = docSnap.data() as Record<string, unknown>;
-          const created = d.createdAt as { toMillis?: () => number } | undefined;
-          const sortMs = typeof created?.toMillis === 'function' ? created.toMillis() : 0;
-          const cat =
-            d.category === 'ecommerce' || d.category === 'web-apps' ? d.category : 'business';
-          const catLabel =
-            cat === 'ecommerce'
-              ? 'E-Commerce'
-              : cat === 'web-apps'
-                ? 'Web Apps'
-                : 'Business';
-          const pType =
-            d.previewType === 'portfolio' ||
-            d.previewType === 'ecommerce' ||
-            d.previewType === 'business' ||
-            d.previewType === 'custom'
-              ? d.previewType
-              : 'custom';
-          return {
-            id: docSnap.id,
-            title: String(d.title || 'Untitled Project'),
-            category: cat,
-            categoryLabel: catLabel,
-            description: String(d.description || ''),
-            longDescription: String(d.longDescription || d.description || ''),
-            year: String(d.year || currentYear),
-            techStack: Array.isArray(d.techStack) ? d.techStack.map(String) : ['React'],
-            highlights: Array.isArray(d.highlights)
-              ? d.highlights.map(String)
-              : ['Responsive modern web build'],
-            previewType: pType,
-            liveUrl: typeof d.liveUrl === 'string' ? d.liveUrl : '',
-            thumbnailUrl: typeof d.thumbnailUrl === 'string' ? d.thumbnailUrl : '',
-            sortMs,
-          };
-        });
-        rows.sort((a, b) => b.sortMs - a.sortMs);
-        setFirestoreProjects(rows.map(({ sortMs: _s, ...item }) => item));
-        setHasFirestoreProjects(true);
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'projects');
       }
-    );
-    return () => unsubscribe();
-  }, [currentYear]);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      source?.close();
+    };
+  }, [loadAdminOverview, loadPublicPortfolio]);
+
+  // Track real public portfolio visitor once per browser session
+  useEffect(() => {
+    if (isAdminRoute) return;
+    try {
+      if (sessionStorage.getItem('mj_visit_tracked')) return;
+      sessionStorage.setItem('mj_visit_tracked', '1');
+    } catch {
+      // Proceed cleanly even if sessionStorage is unavailable
+    }
+    void fetch('/api/analytics/visit', { method: 'POST', keepalive: true }).catch(() => {});
+  }, [isAdminRoute]);
+
+  const trackContactClick = () => {
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+        navigator.sendBeacon('/api/analytics/click');
+        return;
+      }
+    } catch {
+      // Fallback to fetch
+    }
+    void fetch('/api/analytics/click', { method: 'POST', keepalive: true }).catch(() => {});
+  };
 
   // Scroll-spy for visible sections
   useEffect(() => {
@@ -331,8 +292,8 @@ export default function App() {
     }
   };
 
-  const displaySkills = hasFirestoreSkills ? firestoreSkills : DEFAULT_SKILLS;
-  const displayProjects = hasFirestoreProjects ? firestoreProjects : DEFAULT_PROJECTS;
+  const displaySkills = skills;
+  const displayProjects = projects;
   const filteredProjects =
     selectedCategory === 'all'
       ? displayProjects
@@ -447,17 +408,19 @@ export default function App() {
   if (isAdminRoute) {
     return (
       <>
-        <AdminPanelModal
-          open={true}
-          standalone={true}
+        <AdminDashboard
           user={user}
           isAdminUser={isAdminUser}
           authReady={authReady}
           projects={displayProjects}
-          hasFirestoreProjects={hasFirestoreProjects}
           skills={displaySkills}
-          hasFirestoreSkills={hasFirestoreSkills}
           siteConfig={siteConfig}
+          analytics={analytics}
+          analyticsLoading={analyticsLoading}
+          onRefreshData={async () => {
+            await loadPublicPortfolio();
+            if (user) await loadAdminOverview(user);
+          }}
           onClose={navigateToHome}
           onNotify={showToast}
         />
@@ -529,6 +492,7 @@ export default function App() {
                     href={heroWhatsappHref}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={trackContactClick}
                     className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full text-[13px] font-semibold whitespace-nowrap shrink-0 transition-all duration-150 text-[#dfe6ff] hover:text-white hover:bg-[#141f4a]/70 border border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]"
                   >
                     {renderNavIcon(item.id)}
@@ -564,6 +528,7 @@ export default function App() {
               href={heroWhatsappHref}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={trackContactClick}
               className="hidden sm:inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#a63fff] to-[#6832ff] text-[13px] font-bold text-white shadow-[0_6px_22px_rgba(128,53,255,0.48)] hover:brightness-110 active:scale-[0.98] transition-all duration-150 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c084fc]"
             >
               <Send className="w-3.5 h-3.5" />
@@ -593,7 +558,10 @@ export default function App() {
                     href={heroWhatsappHref}
                     target="_blank"
                     rel="noopener noreferrer"
-                    onClick={() => setMobileMenuOpen(false)}
+                    onClick={() => {
+                      trackContactClick();
+                      setMobileMenuOpen(false);
+                    }}
                     className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-[#6ee7b7] hover:bg-[#131e47] transition-colors"
                   >
                     <MessageCircle className="w-4 h-4 shrink-0" />
@@ -626,7 +594,10 @@ export default function App() {
                 href={heroWhatsappHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={() => setMobileMenuOpen(false)}
+                onClick={() => {
+                  trackContactClick();
+                  setMobileMenuOpen(false);
+                }}
                 className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-[#a63fff] to-[#6832ff] text-sm font-bold text-white shadow-lg"
               >
                 <Send className="w-4 h-4" />
@@ -702,6 +673,7 @@ export default function App() {
                   href={heroWhatsappHref}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={trackContactClick}
                   className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-full border border-[#7282b4] bg-[#09102d]/85 text-sm font-bold text-white hover:border-[#22c55e] hover:bg-[#0b252c] hover:-translate-y-0.5 transition-all duration-150 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]"
                 >
                   <MessageCircle className="w-4 h-4 text-[#4ade80]" />
@@ -796,6 +768,7 @@ export default function App() {
                       href={skillWhatsappHref}
                       target="_blank"
                       rel="noopener noreferrer"
+                      onClick={trackContactClick}
                       className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-[#1f5e48] bg-[#082b27]/85 text-[10px] font-semibold text-[#6ee7b7] hover:bg-[#16a34a] hover:text-white hover:border-[#22c55e] transition-colors whitespace-nowrap"
                     >
                       <MessageCircle className="w-2.5 h-2.5 shrink-0" />
@@ -914,6 +887,7 @@ export default function App() {
                           href={projectWhatsappHref}
                           target="_blank"
                           rel="noopener noreferrer"
+                          onClick={trackContactClick}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#1f624a] bg-[#082c27]/90 text-[11px] font-bold text-[#6ee7b7] hover:bg-[#16a34a] hover:text-white hover:border-[#22c55e] transition-all whitespace-nowrap"
                         >
                           <MessageCircle className="w-3 h-3" />
@@ -937,7 +911,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* ABOUT ME & 3 QUICK SERVICE CARDS SECTION (Contact form removed per user request) */}
+        {/* ABOUT ME & 3 QUICK SERVICE CARDS SECTION */}
         <section className="py-7 sm:py-9">
           <div className="max-w-[1160px] mx-auto px-4 sm:px-6 space-y-6">
             {/* About Me Banner Card */}
@@ -1030,6 +1004,7 @@ export default function App() {
                     href={buildWhatsAppUrl(siteConfig.whatsappNumber, card.whatsappText)}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={trackContactClick}
                     className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-full border border-[#1f624a] bg-[#082c27]/90 text-[11px] font-bold text-[#6ee7b7] hover:bg-[#16a34a] hover:text-white hover:border-[#22c55e] transition-colors whitespace-nowrap"
                   >
                     <MessageCircle className="w-3.5 h-3.5" />
@@ -1106,20 +1081,13 @@ export default function App() {
         project={selectedProject}
         siteConfig={siteConfig}
         onClose={() => setSelectedProject(null)}
+        onContactClick={trackContactClick}
       />
-      <InfoModal mode={infoModal} siteConfig={siteConfig} onClose={() => setInfoModal(null)} />
-      <AdminPanelModal
-        open={adminOpen}
-        user={user}
-        isAdminUser={isAdminUser}
-        authReady={authReady}
-        projects={displayProjects}
-        hasFirestoreProjects={hasFirestoreProjects}
-        skills={displaySkills}
-        hasFirestoreSkills={hasFirestoreSkills}
+      <InfoModal
+        mode={infoModal}
         siteConfig={siteConfig}
-        onClose={() => setAdminOpen(false)}
-        onNotify={showToast}
+        onClose={() => setInfoModal(null)}
+        onContactClick={trackContactClick}
       />
 
       {/* Toast Notification */}

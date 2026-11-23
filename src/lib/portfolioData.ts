@@ -13,6 +13,7 @@ export interface ProjectItem {
   previewType: 'portfolio' | 'ecommerce' | 'business' | 'custom';
   liveUrl: string;
   thumbnailUrl: string;
+  status?: string;
   isDefault?: boolean;
 }
 
