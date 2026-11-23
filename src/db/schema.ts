@@ -90,3 +90,9 @@ export const analyticsSummary = pgTable('analytics_summary', {
   totalContactClicks: integer('total_contact_clicks').notNull().default(0),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
+
+export const adminCredentials = pgTable('admin_credentials', {
+  id: text('id').primaryKey(),
+  passwordHash: text('password_hash').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});

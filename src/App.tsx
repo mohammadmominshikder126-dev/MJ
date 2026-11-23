@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import {
   ArrowRight,
   ArrowUp,
@@ -18,7 +17,11 @@ import {
   User,
   X,
 } from 'lucide-react';
-import { AdminDashboard, type AnalyticsOverview } from './components/AdminDashboard';
+import {
+  type AdminAuthStatus,
+  AdminDashboard,
+  type AnalyticsOverview,
+} from './components/AdminDashboard';
 import {
   FacebookIcon,
   GithubIcon,
@@ -44,7 +47,6 @@ import {
   SiteConfig,
   SkillItem,
 } from './lib/portfolioData';
-import { ADMIN_EMAIL, auth } from './lib/firebase';
 
 const ADMIN_ROUTE_PATH = '/Admin/login/mj';
 
@@ -76,9 +78,13 @@ export default function App() {
   const [analytics, setAnalytics] = useState<AnalyticsOverview>(EMPTY_ANALYTICS);
   const [analyticsLoading, setAnalyticsLoading] = useState<boolean>(false);
 
-  const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [isAdminUser, setIsAdminUser] = useState<boolean>(false);
-  const [authReady, setAuthReady] = useState<boolean>(false);
+  const [adminToken, setAdminToken] = useState<string | null>(null);
+  const adminTokenRef = useRef<string | null>(null);
+  const [authStatus, setAuthStatus] = useState<AdminAuthStatus>({
+    loading: true,
+    configured: true,
+    mode: 'env',
+  });
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [heroArtFailed, setHeroArtFailed] = useState(false);
@@ -97,6 +103,10 @@ export default function App() {
       setToastMessage(null);
     }, 3200);
   };
+
+  useEffect(() => {
+    adminTokenRef.current = adminToken;
+  }, [adminToken]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -154,57 +164,63 @@ export default function App() {
     }
   }, []);
 
-  const loadAdminOverview = useCallback(
-    async (activeUser: FirebaseUser | null) => {
-      if (!activeUser) return;
-      setAnalyticsLoading(true);
-      try {
-        const token = await activeUser.getIdToken();
-        const res = await fetch('/api/admin/overview', {
-          cache: 'no-store',
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as {
-          siteConfig?: SiteConfig;
-          skills?: SkillItem[];
-          projects?: ProjectItem[];
-          analytics?: AnalyticsOverview;
-        };
-        if (data.siteConfig) setSiteConfig(data.siteConfig);
-        if (Array.isArray(data.skills)) setSkills(data.skills);
-        if (Array.isArray(data.projects)) setProjects(data.projects);
-        if (data.analytics) setAnalytics(data.analytics);
-      } catch {
-        // Handled cleanly in UI
-      } finally {
-        setAnalyticsLoading(false);
-      }
-    },
-    []
-  );
-
-  // Firebase Auth listener
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
-      setUser(nextUser);
-      if (!nextUser) {
-        setIsAdminUser(false);
+  const loadAdminOverview = useCallback(async (token: string | null) => {
+    if (!token) return;
+    setAnalyticsLoading(true);
+    try {
+      const res = await fetch('/api/admin/overview', {
+        cache: 'no-store',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 401) {
+        setAdminToken(null);
         setAnalytics(EMPTY_ANALYTICS);
-        setAuthReady(true);
         return;
       }
-      const authorized =
-        Boolean(nextUser.emailVerified) &&
-        nextUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-      setIsAdminUser(authorized);
-      setAuthReady(true);
-      if (authorized) {
-        void loadAdminOverview(nextUser);
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        siteConfig?: SiteConfig;
+        skills?: SkillItem[];
+        projects?: ProjectItem[];
+        analytics?: AnalyticsOverview;
+      };
+      if (data.siteConfig) setSiteConfig(data.siteConfig);
+      if (Array.isArray(data.skills)) setSkills(data.skills);
+      if (Array.isArray(data.projects)) setProjects(data.projects);
+      if (data.analytics) setAnalytics(data.analytics);
+    } catch {
+      // Handled cleanly in UI
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, []);
+
+  const refreshAuthStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/auth/status', { cache: 'no-store' });
+      if (!res.ok) {
+        setAuthStatus({ loading: false, configured: true, mode: 'env' });
+        return;
       }
-    });
-    return () => unsubscribe();
-  }, [loadAdminOverview]);
+      const data = (await res.json()) as {
+        configured?: boolean;
+        mode?: 'env' | 'claimed' | 'unclaimed';
+      };
+      setAuthStatus({
+        loading: false,
+        configured: Boolean(data.configured),
+        mode: data.mode || 'env',
+      });
+    } catch {
+      setAuthStatus({ loading: false, configured: true, mode: 'env' });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAdminRoute) {
+      void refreshAuthStatus();
+    }
+  }, [isAdminRoute, refreshAuthStatus]);
 
   // Initial Load + Real-Time Server-Sent Events Sync between Admin Panel & User Panel
   useEffect(() => {
@@ -215,8 +231,8 @@ export default function App() {
       source = new EventSource('/api/realtime');
       source.addEventListener('update', () => {
         void loadPublicPortfolio();
-        if (auth.currentUser && auth.currentUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-          void loadAdminOverview(auth.currentUser);
+        if (adminTokenRef.current) {
+          void loadAdminOverview(adminTokenRef.current);
         }
       });
     } catch {
@@ -226,8 +242,8 @@ export default function App() {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         void loadPublicPortfolio();
-        if (auth.currentUser && auth.currentUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-          void loadAdminOverview(auth.currentUser);
+        if (adminTokenRef.current) {
+          void loadAdminOverview(adminTokenRef.current);
         }
       }
     };
@@ -409,17 +425,25 @@ export default function App() {
     return (
       <>
         <AdminDashboard
-          user={user}
-          isAdminUser={isAdminUser}
-          authReady={authReady}
+          adminToken={adminToken}
+          authStatus={authStatus}
           projects={displayProjects}
           skills={displaySkills}
           siteConfig={siteConfig}
           analytics={analytics}
           analyticsLoading={analyticsLoading}
+          onAuthenticated={async (token) => {
+            setAdminToken(token);
+            setAuthStatus((prev) => ({ ...prev, configured: true }));
+            await loadAdminOverview(token);
+          }}
+          onSignOut={() => {
+            setAdminToken(null);
+            setAnalytics(EMPTY_ANALYTICS);
+          }}
           onRefreshData={async () => {
             await loadPublicPortfolio();
-            if (user) await loadAdminOverview(user);
+            if (adminTokenRef.current) await loadAdminOverview(adminTokenRef.current);
           }}
           onClose={navigateToHome}
           onNotify={showToast}

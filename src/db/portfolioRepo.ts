@@ -8,7 +8,14 @@ import {
   type SkillItem,
 } from '../lib/portfolioData.ts';
 import { db } from './index.ts';
-import { analyticsDaily, analyticsSummary, projects, siteConfig, skills } from './schema.ts';
+import {
+  adminCredentials,
+  analyticsDaily,
+  analyticsSummary,
+  projects,
+  siteConfig,
+  skills,
+} from './schema.ts';
 
 export interface DailyAnalyticsRow {
   dateKey: string;
@@ -525,3 +532,35 @@ export async function resetAnalyticsMetrics() {
     throw new Error('Failed to reset analytics.', { cause: error });
   }
 }
+
+export async function getAdminCredentialHash(): Promise<string | null> {
+  try {
+    const rows = await db
+      .select()
+      .from(adminCredentials)
+      .where(eq(adminCredentials.id, 'primary'))
+      .limit(1);
+    return rows[0]?.passwordHash ?? null;
+  } catch (error) {
+    console.error('Database query failed in getAdminCredentialHash:', error);
+    throw new Error('Failed to check admin credentials.', { cause: error });
+  }
+}
+
+export async function claimAdminCredentialHash(passwordHash: string): Promise<boolean> {
+  try {
+    const inserted = await db
+      .insert(adminCredentials)
+      .values({
+        id: 'primary',
+        passwordHash,
+      })
+      .onConflictDoNothing()
+      .returning();
+    return inserted.length > 0;
+  } catch (error) {
+    console.error('Database query failed in claimAdminCredentialHash:', error);
+    throw new Error('Failed to save admin passcode.', { cause: error });
+  }
+}
+

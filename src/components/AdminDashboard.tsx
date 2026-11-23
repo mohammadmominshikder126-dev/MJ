@@ -1,15 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { User, signInWithPopup, signOut } from 'firebase/auth';
 import {
   ArrowLeft,
   CheckCircle2,
-  Copy,
   ExternalLink,
   Eye,
   Folder,
   FolderPlus,
   Image as ImageIcon,
   Images,
+  KeyRound,
   LogOut,
   MessageCircle,
   Pencil,
@@ -20,7 +19,6 @@ import {
   Search,
   Send,
   Settings,
-  ShieldAlert,
   ShieldCheck,
   Trash2,
   Upload,
@@ -38,7 +36,6 @@ import {
   SKILL_ICON_OPTIONS,
   SkillItem,
 } from '../lib/portfolioData';
-import { ADMIN_EMAIL, auth, FIREBASE_PROJECT_ID, googleProvider } from '../lib/firebase';
 import { MjLogoMark, SkillIcon } from './BrandAndSkillIcons';
 
 export interface DailyAnalyticsRow {
@@ -55,15 +52,22 @@ export interface AnalyticsOverview {
   dailyHistory: DailyAnalyticsRow[];
 }
 
+export interface AdminAuthStatus {
+  loading: boolean;
+  configured: boolean;
+  mode: 'env' | 'claimed' | 'unclaimed';
+}
+
 interface AdminDashboardProps {
-  user: User | null;
-  isAdminUser: boolean;
-  authReady: boolean;
+  adminToken: string | null;
+  authStatus: AdminAuthStatus;
   projects: ProjectItem[];
   skills: SkillItem[];
   siteConfig: SiteConfig;
   analytics: AnalyticsOverview;
   analyticsLoading: boolean;
+  onAuthenticated: (token: string) => Promise<void>;
+  onSignOut: () => void;
   onRefreshData: () => Promise<void>;
   onClose: () => void;
   onNotify: (message: string) => void;
@@ -122,10 +126,9 @@ async function compressImageFile(file: File, maxDim = 960, maxBytes = 280_000): 
 
 async function authorizedFetch(
   url: string,
-  user: User,
+  token: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  const token = await user.getIdToken();
   const headers = new Headers(options.headers);
   headers.set('Authorization', `Bearer ${token}`);
   if (options.body && !headers.has('Content-Type')) {
@@ -135,14 +138,15 @@ async function authorizedFetch(
 }
 
 export function AdminDashboard({
-  user,
-  isAdminUser,
-  authReady,
+  adminToken,
+  authStatus,
   projects,
   skills,
   siteConfig,
   analytics,
   analyticsLoading,
+  onAuthenticated,
+  onSignOut,
   onRefreshData,
   onClose,
   onNotify,
@@ -151,7 +155,8 @@ export function AdminDashboard({
   const [settingsTab, setSettingsTab] = useState<SiteSettingsSubTab>('skills');
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [unauthorizedHost, setUnauthorizedHost] = useState<string | null>(null);
+  const [passcodeInput, setPasscodeInput] = useState('');
+  const [confirmPasscodeInput, setConfirmPasscodeInput] = useState('');
 
   const [projectSearch, setProjectSearch] = useState('');
   const [confirmDeleteProjectId, setConfirmDeleteProjectId] = useState<string | null>(null);
@@ -168,7 +173,7 @@ export function AdminDashboard({
     'Responsive mobile & desktop design\nFast loading & SEO friendly\nDirect WhatsApp contact integration'
   );
   const [liveUrl, setLiveUrl] = useState('');
-  const [techStackInput, setTechStackInput] = useState('React, Tailwind CSS, PostgreSQL');
+  const [techStackInput, setTechStackInput] = useState('React, Tailwind CSS, Supabase');
   const [thumbnailUrl, setThumbnailUrl] = useState('');
   const [projectBusy, setProjectBusy] = useState(false);
   const [projectError, setProjectError] = useState<string | null>(null);
@@ -187,6 +192,8 @@ export function AdminDashboard({
   const [configBusy, setConfigBusy] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
 
+  const isAdminAuthenticated = Boolean(adminToken);
+
   useEffect(() => {
     setFormConfig(siteConfig);
   }, [siteConfig]);
@@ -195,48 +202,57 @@ export function AdminDashboard({
     setFormConfig((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleGoogleLogin = async () => {
+  const handlePasscodeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setAuthError(null);
-    setUnauthorizedHost(null);
+    const cleanPass = passcodeInput.trim();
+    if (!cleanPass) {
+      setAuthError('Please enter your admin passcode.');
+      return;
+    }
+
+    if (!authStatus.configured) {
+      if (cleanPass.length < 6) {
+        setAuthError('Passcode must be at least 6 characters.');
+        return;
+      }
+      if (cleanPass !== confirmPasscodeInput.trim()) {
+        setAuthError('Passcodes do not match.');
+        return;
+      }
+    }
+
     setAuthBusy(true);
     try {
-      await signInWithPopup(auth, googleProvider);
-      onNotify('Signed in to Admin Control Center');
-    } catch (err) {
-      const code = (err as { code?: string })?.code || '';
-      const rawMessage = err instanceof Error ? err.message : 'Google Sign-In failed.';
-      if (code === 'auth/unauthorized-domain' || rawMessage.includes('auth/unauthorized-domain')) {
-        const host = typeof window !== 'undefined' ? window.location.hostname : '';
-        setUnauthorizedHost(host || 'your-domain');
-        setAuthError(
-          `Domain "${host}" is not yet authorized in Firebase Authentication. Add it in Firebase Console → Authentication → Settings → Authorized domains.`
-        );
-      } else {
-        setAuthError(rawMessage);
+      const endpoint = authStatus.configured ? '/api/admin/auth/login' : '/api/admin/auth/claim';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passcode: cleanPass }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { token?: string; error?: string };
+      if (!res.ok || !data.token) {
+        throw new Error(data.error || 'Authentication failed.');
       }
+      setPasscodeInput('');
+      setConfirmPasscodeInput('');
+      await onAuthenticated(data.token);
+      onNotify(
+        authStatus.configured
+          ? 'Signed in to Admin Control Center'
+          : 'Admin passcode configured and signed in'
+      );
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : 'Sign-in failed.');
     } finally {
       setAuthBusy(false);
     }
   };
 
-  const handleCopyHost = async () => {
-    if (!unauthorizedHost || typeof navigator === 'undefined') return;
-    try {
-      await navigator.clipboard.writeText(unauthorizedHost);
-      onNotify(`Copied "${unauthorizedHost}"`);
-    } catch {
-      onNotify(unauthorizedHost);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      setView('overview');
-      onNotify('Signed out from Admin Control Center');
-    } catch {
-      onNotify('Could not sign out');
-    }
+  const handleLogout = () => {
+    setView('overview');
+    onSignOut();
+    onNotify('Signed out from Admin Control Center');
   };
 
   const resetProjectForm = () => {
@@ -289,7 +305,7 @@ export function AdminDashboard({
 
   const handleSaveProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !isAdminUser) return;
+    if (!adminToken) return;
     setProjectError(null);
 
     const cleanTitle = title.trim();
@@ -348,7 +364,7 @@ export function AdminDashboard({
 
       const res = await authorizedFetch(
         editingId ? `/api/admin/projects/${encodeURIComponent(editingId)}` : '/api/admin/projects',
-        user,
+        adminToken,
         {
           method: editingId ? 'PUT' : 'POST',
           body: JSON.stringify(payload),
@@ -372,11 +388,15 @@ export function AdminDashboard({
   };
 
   const handleDeleteProject = async (projectId: string) => {
-    if (!user || !isAdminUser) return;
+    if (!adminToken) return;
     try {
-      const res = await authorizedFetch(`/api/admin/projects/${encodeURIComponent(projectId)}`, user, {
-        method: 'DELETE',
-      });
+      const res = await authorizedFetch(
+        `/api/admin/projects/${encodeURIComponent(projectId)}`,
+        adminToken,
+        {
+          method: 'DELETE',
+        }
+      );
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(data.error || 'Delete failed.');
@@ -393,10 +413,10 @@ export function AdminDashboard({
   };
 
   const handleSeedProjects = async () => {
-    if (!user || !isAdminUser) return;
+    if (!adminToken) return;
     setProjectBusy(true);
     try {
-      const res = await authorizedFetch('/api/admin/projects/seed', user, { method: 'POST' });
+      const res = await authorizedFetch('/api/admin/projects/seed', adminToken, { method: 'POST' });
       if (!res.ok) throw new Error('Could not restore starter projects.');
       await onRefreshData();
       onNotify('Starter projects restored');
@@ -409,7 +429,7 @@ export function AdminDashboard({
 
   const handleSaveSiteConfig = async (e?: React.FormEvent, successMsg?: string) => {
     if (e) e.preventDefault();
-    if (!user || !isAdminUser) return;
+    if (!adminToken) return;
     setConfigError(null);
 
     const digits = formConfig.whatsappNumber.replace(/\D/g, '');
@@ -434,7 +454,7 @@ export function AdminDashboard({
 
     setConfigBusy(true);
     try {
-      const res = await authorizedFetch('/api/admin/config', user, {
+      const res = await authorizedFetch('/api/admin/config', adminToken, {
         method: 'PUT',
         body: JSON.stringify(formConfig),
       });
@@ -471,7 +491,7 @@ export function AdminDashboard({
 
   const handleSaveSkill = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !isAdminUser) return;
+    if (!adminToken) return;
     setSkillError(null);
     if (!skillName.trim()) {
       setSkillError('Skill name is required.');
@@ -488,7 +508,7 @@ export function AdminDashboard({
       };
       const res = await authorizedFetch(
         editingSkillId ? `/api/admin/skills/${encodeURIComponent(editingSkillId)}` : '/api/admin/skills',
-        user,
+        adminToken,
         {
           method: editingSkillId ? 'PUT' : 'POST',
           body: JSON.stringify(payload),
@@ -507,11 +527,15 @@ export function AdminDashboard({
   };
 
   const handleDeleteSkill = async (skillId: string) => {
-    if (!user || !isAdminUser) return;
+    if (!adminToken) return;
     try {
-      const res = await authorizedFetch(`/api/admin/skills/${encodeURIComponent(skillId)}`, user, {
-        method: 'DELETE',
-      });
+      const res = await authorizedFetch(
+        `/api/admin/skills/${encodeURIComponent(skillId)}`,
+        adminToken,
+        {
+          method: 'DELETE',
+        }
+      );
       if (!res.ok) throw new Error('Failed to delete skill.');
       await onRefreshData();
       onNotify('Skill removed');
@@ -521,10 +545,10 @@ export function AdminDashboard({
   };
 
   const handleSeedSkills = async () => {
-    if (!user || !isAdminUser) return;
+    if (!adminToken) return;
     setSkillBusy(true);
     try {
-      const res = await authorizedFetch('/api/admin/skills/seed', user, { method: 'POST' });
+      const res = await authorizedFetch('/api/admin/skills/seed', adminToken, { method: 'POST' });
       if (!res.ok) throw new Error('Restore failed.');
       await onRefreshData();
       onNotify('Default skills restored');
@@ -536,9 +560,11 @@ export function AdminDashboard({
   };
 
   const handleResetAnalytics = async () => {
-    if (!user || !isAdminUser) return;
+    if (!adminToken) return;
     try {
-      const res = await authorizedFetch('/api/admin/analytics/reset', user, { method: 'POST' });
+      const res = await authorizedFetch('/api/admin/analytics/reset', adminToken, {
+        method: 'POST',
+      });
       if (!res.ok) throw new Error('Could not reset analytics.');
       setConfirmResetAnalytics(false);
       await onRefreshData();
@@ -686,17 +712,17 @@ export function AdminDashboard({
           <div className="flex items-center gap-2 shrink-0">
             <span
               className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wide uppercase border whitespace-nowrap ${
-                isAdminUser
+                isAdminAuthenticated
                   ? 'border-[#10b981]/35 bg-[#062d26]/90 text-[#34d399]'
                   : 'border-amber-400/35 bg-amber-950/50 text-amber-300'
               }`}
             >
               <span
                 className={`w-2 h-2 rounded-full ${
-                  isAdminUser ? 'bg-[#10b981] shadow-[0_0_8px_#10b981]' : 'bg-amber-400'
+                  isAdminAuthenticated ? 'bg-[#10b981] shadow-[0_0_8px_#10b981]' : 'bg-amber-400'
                 }`}
               />
-              <span>{isAdminUser ? 'ADMIN ONLINE' : 'AUTH REQUIRED'}</span>
+              <span>{isAdminAuthenticated ? 'ADMIN ONLINE' : 'AUTH REQUIRED'}</span>
             </span>
 
             <button
@@ -708,7 +734,7 @@ export function AdminDashboard({
               <span>View Site</span>
             </button>
 
-            {user && (
+            {isAdminAuthenticated && (
               <button
                 type="button"
                 onClick={handleLogout}
@@ -725,82 +751,84 @@ export function AdminDashboard({
       </header>
 
       <main className="relative z-10 max-w-[1060px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        {!authReady ? (
+        {authStatus.loading ? (
           <div className="rounded-2xl border border-[#233267] bg-[#0a1130]/90 p-10 text-center text-sm text-[#b9c7eb]">
-            Checking administrator session...
+            Checking administrator access...
           </div>
-        ) : !user ? (
-          <div className="max-w-md mx-auto rounded-2xl border border-[#273873] bg-[#0a1130]/95 p-7 text-center shadow-[0_20px_50px_rgba(0,0,0,0.55)]">
-            <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-[#7c3aed] to-[#2563eb] grid place-items-center mb-4 shadow-lg">
-              <ShieldCheck className="w-7 h-7 text-white" />
+        ) : !isAdminAuthenticated ? (
+          <form
+            onSubmit={handlePasscodeSubmit}
+            className="max-w-md mx-auto rounded-2xl border border-[#273873] bg-[#0a1130]/95 p-7 shadow-[0_20px_50px_rgba(0,0,0,0.55)] space-y-5"
+          >
+            <div className="text-center">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-[#7c3aed] to-[#2563eb] grid place-items-center mb-4 shadow-lg">
+                <ShieldCheck className="w-7 h-7 text-white" />
+              </div>
+              <h1 className="font-display text-2xl font-bold text-white">
+                {authStatus.configured ? 'Admin Control Login' : 'Set Admin Passcode'}
+              </h1>
+              <p className="mt-2 text-xs sm:text-sm text-[#aebbe0] leading-relaxed">
+                {authStatus.configured
+                  ? 'Enter your administrator passcode to open the real-time Control Center.'
+                  : 'First-time setup: create a secure administrator passcode (minimum 6 characters) to protect your Control Center.'}
+              </p>
             </div>
-            <h1 className="font-display text-2xl font-bold text-white">Admin Sign In</h1>
-            <p className="mt-2 text-xs sm:text-sm text-[#aebbe0] leading-relaxed">
-              Sign in with your verified Google Admin account (
-              <span className="text-white font-semibold">{ADMIN_EMAIL}</span>) to unlock A-to-Z
-              real-time website controls.
-            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-[#c6d3f7] mb-1.5">
+                  {authStatus.configured ? 'Admin Passcode' : 'New Admin Passcode'}
+                </label>
+                <input
+                  type="password"
+                  value={passcodeInput}
+                  onChange={(e) => setPasscodeInput(e.target.value)}
+                  placeholder="Enter passcode..."
+                  autoComplete={authStatus.configured ? 'current-password' : 'new-password'}
+                  className={inputCls}
+                  required
+                />
+              </div>
+
+              {!authStatus.configured && (
+                <div>
+                  <label className="block text-xs font-semibold text-[#c6d3f7] mb-1.5">
+                    Confirm Admin Passcode
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmPasscodeInput}
+                    onChange={(e) => setConfirmPasscodeInput(e.target.value)}
+                    placeholder="Re-enter passcode..."
+                    autoComplete="new-password"
+                    className={inputCls}
+                    required
+                  />
+                </div>
+              )}
+            </div>
 
             {authError && (
-              <div className="mt-4 p-3.5 rounded-xl border border-rose-500/45 bg-rose-950/45 text-xs text-rose-200 text-left space-y-2.5">
-                <p>{authError}</p>
-                {unauthorizedHost && (
-                  <div className="pt-2 border-t border-rose-500/30 space-y-2">
-                    <div className="flex items-center justify-between gap-2 bg-[#070d25] border border-[#2a3b72] rounded-lg px-2.5 py-1.5">
-                      <code className="text-[11px] text-[#7dd3fc] truncate">{unauthorizedHost}</code>
-                      <button
-                        type="button"
-                        onClick={handleCopyHost}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded bg-[#18265c] text-[10px] font-bold text-white hover:bg-[#243884] cursor-pointer shrink-0"
-                      >
-                        <Copy className="w-3 h-3" />
-                        <span>Copy</span>
-                      </button>
-                    </div>
-                    <a
-                      href={`https://console.firebase.google.com/project/${FIREBASE_PROJECT_ID}/authentication/settings`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#93c5fd] hover:text-white underline"
-                    >
-                      <span>Open Firebase Authorized Domains</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </div>
-                )}
+              <div className="p-3 rounded-xl border border-rose-500/45 bg-rose-950/45 text-xs text-rose-200">
+                {authError}
               </div>
             )}
 
             <button
-              type="button"
-              onClick={handleGoogleLogin}
+              type="submit"
               disabled={authBusy}
-              className="mt-6 w-full inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-gradient-to-r from-[#8b3eff] to-[#4f46e5] text-sm font-bold text-white shadow-[0_10px_28px_rgba(124,58,237,0.45)] hover:brightness-110 transition-all cursor-pointer disabled:opacity-60"
+              className="w-full inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-gradient-to-r from-[#8b3eff] to-[#4f46e5] text-sm font-bold text-white shadow-[0_10px_28px_rgba(124,58,237,0.45)] hover:brightness-110 transition-all cursor-pointer disabled:opacity-60"
             >
-              <ShieldCheck className="w-4 h-4" />
-              <span>{authBusy ? 'Connecting...' : 'Sign in with Google'}</span>
+              <KeyRound className="w-4 h-4" />
+              <span>
+                {authBusy
+                  ? 'Verifying...'
+                  : authStatus.configured
+                    ? 'Unlock Admin Panel'
+                    : 'Save Passcode & Open Dashboard'}
+              </span>
             </button>
-          </div>
-        ) : !isAdminUser ? (
-          <div className="max-w-md mx-auto rounded-2xl border border-rose-500/40 bg-[#0a1130]/95 p-7 text-center space-y-4">
-            <ShieldAlert className="w-10 h-10 text-rose-400 mx-auto" />
-            <div>
-              <h1 className="font-display text-lg font-bold text-white">Access Restricted</h1>
-              <p className="mt-1.5 text-xs sm:text-sm text-[#c7d3f7]">
-                Signed in as <span className="text-white font-semibold">{user.email}</span>. Only{' '}
-                <span className="text-white font-semibold">{ADMIN_EMAIL}</span> has Admin Control
-                Center access.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-[#2f4280] bg-[#101944] text-xs font-semibold text-white hover:border-[#8f44ff] cursor-pointer"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Switch Google Account</span>
-            </button>
-          </div>
+          </form>
         ) : (
           <div className="space-y-6">
             {/* Sub-view Breadcrumb Bar */}

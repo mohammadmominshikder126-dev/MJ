@@ -13,21 +13,15 @@ import {
   type SiteConfig,
   type SkillItem,
 } from './src/lib/portfolioData.ts';
+import { store } from './src/db/dataStore.ts';
 import {
-  deleteProjectRecord,
-  deleteSkillRecord,
-  getAnalyticsReport,
-  getPublicPortfolioData,
-  incrementContactClickMetric,
-  incrementVisitorMetric,
-  resetAnalyticsMetrics,
-  seedDefaultProjectsRecords,
-  seedDefaultSkillsRecords,
-  updateSiteConfigRecord,
-  upsertProjectRecord,
-  upsertSkillRecord,
-} from './src/db/portfolioRepo.ts';
-import { requireAdmin, type AuthRequest } from './src/middleware/auth.ts';
+  hashPasscode,
+  issueAdminToken,
+  requireAdmin,
+  verifyEnvPasscode,
+  verifyHashedPasscode,
+  type AuthRequest,
+} from './src/middleware/auth.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -265,10 +259,102 @@ async function startServer() {
     });
   });
 
+  // Admin Passcode Auth Routes (100% Firebase-free)
+  app.get('/api/admin/auth/status', async (_req: Request, res: Response) => {
+    try {
+      const envPasscode = process.env.ADMIN_PASSCODE?.trim();
+      if (envPasscode) {
+        res.json({ configured: true, mode: 'env' });
+        return;
+      }
+      const existingHash = await store.getAdminCredentialHash();
+      res.json({
+        configured: Boolean(existingHash),
+        mode: existingHash ? 'claimed' : 'unclaimed',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not inspect auth status.';
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.post('/api/admin/auth/claim', async (req: Request, res: Response) => {
+    const envPasscode = process.env.ADMIN_PASSCODE?.trim();
+    if (envPasscode) {
+      res.status(409).json({ error: 'Admin passcode is already configured.' });
+      return;
+    }
+
+    const body = (req.body || {}) as Record<string, unknown>;
+    const passcode = typeof body.passcode === 'string' ? body.passcode.trim() : '';
+    if (passcode.length < 6 || passcode.length > 100) {
+      res.status(400).json({ error: 'Passcode must be between 6 and 100 characters.' });
+      return;
+    }
+
+    try {
+      const existingHash = await store.getAdminCredentialHash();
+      if (existingHash) {
+        res.status(409).json({ error: 'Admin passcode has already been claimed.' });
+        return;
+      }
+      const passwordHash = hashPasscode(passcode);
+      const claimed = await store.claimAdminCredentialHash(passwordHash);
+      if (!claimed) {
+        res.status(409).json({ error: 'Admin passcode has already been claimed.' });
+        return;
+      }
+      const token = issueAdminToken();
+      res.status(201).json({ token });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to claim admin passcode.';
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.post('/api/admin/auth/login', async (req: Request, res: Response) => {
+    const body = (req.body || {}) as Record<string, unknown>;
+    const passcode = typeof body.passcode === 'string' ? body.passcode.trim() : '';
+    if (!passcode || passcode.length > 100) {
+      res.status(400).json({ error: 'Please enter your admin passcode.' });
+      return;
+    }
+
+    try {
+      const envPasscode = process.env.ADMIN_PASSCODE?.trim();
+      if (envPasscode) {
+        if (!verifyEnvPasscode(passcode, envPasscode)) {
+          res.status(401).json({ error: 'Incorrect admin passcode.' });
+          return;
+        }
+        res.json({ token: issueAdminToken() });
+        return;
+      }
+
+      const storedHash = await store.getAdminCredentialHash();
+      if (!storedHash) {
+        res.status(400).json({ error: 'No admin passcode configured yet. Set one first.' });
+        return;
+      }
+      if (!verifyHashedPasscode(passcode, storedHash)) {
+        res.status(401).json({ error: 'Incorrect admin passcode.' });
+        return;
+      }
+      res.json({ token: issueAdminToken() });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Authentication failed.';
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.get('/api/admin/auth/verify', requireAdmin, (_req: AuthRequest, res: Response) => {
+    res.json({ ok: true });
+  });
+
   // Public portfolio data endpoint
   app.get('/api/portfolio', async (_req: Request, res: Response) => {
     try {
-      const payload = await getPublicPortfolioData();
+      const payload = await store.getPublicPortfolioData();
       res.json(payload);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to load portfolio.';
@@ -279,7 +365,7 @@ async function startServer() {
   // Public analytics tracking endpoints (Visitor & Contact Click counters)
   app.post('/api/analytics/visit', async (_req: Request, res: Response) => {
     try {
-      await incrementVisitorMetric();
+      await store.incrementVisitor();
       broadcastRealtime('analytics');
       res.json({ ok: true });
     } catch (error) {
@@ -290,7 +376,7 @@ async function startServer() {
 
   app.post('/api/analytics/click', async (_req: Request, res: Response) => {
     try {
-      await incrementContactClickMetric();
+      await store.incrementContactClick();
       broadcastRealtime('analytics');
       res.json({ ok: true });
     } catch (error) {
@@ -303,8 +389,8 @@ async function startServer() {
   app.get('/api/admin/overview', requireAdmin, async (_req: AuthRequest, res: Response) => {
     try {
       const [portfolio, analytics] = await Promise.all([
-        getPublicPortfolioData(),
-        getAnalyticsReport(),
+        store.getPublicPortfolioData(),
+        store.getAnalyticsReport(),
       ]);
       res.json({ ...portfolio, analytics });
     } catch (error) {
@@ -313,7 +399,7 @@ async function startServer() {
     }
   });
 
-  // Protected Admin: Update Website Config (Logo, Banner, Telegram, Social, About, Cards, Footer)
+  // Protected Admin: Update Website Config
   app.put('/api/admin/config', requireAdmin, async (req: AuthRequest, res: Response) => {
     const parsed = sanitizeSiteConfigInput((req.body || {}) as Record<string, unknown>);
     if (!parsed.ok) {
@@ -321,7 +407,7 @@ async function startServer() {
       return;
     }
     try {
-      const updated = await updateSiteConfigRecord(parsed.data, req.user?.uid || 'admin');
+      const updated = await store.updateSiteConfig(parsed.data, 'admin');
       broadcastRealtime('config');
       res.json({ siteConfig: updated });
     } catch (error) {
@@ -341,7 +427,7 @@ async function startServer() {
       return;
     }
     try {
-      const saved = await upsertProjectRecord(parsed.data, true);
+      const saved = await store.upsertProject(parsed.data, true);
       broadcastRealtime('projects');
       res.status(201).json({ project: saved });
     } catch (error) {
@@ -363,7 +449,7 @@ async function startServer() {
       return;
     }
     try {
-      const saved = await upsertProjectRecord(parsed.data, false);
+      const saved = await store.upsertProject(parsed.data, false);
       if (!saved) {
         res.status(404).json({ error: 'Project not found.' });
         return;
@@ -384,7 +470,7 @@ async function startServer() {
       return;
     }
     try {
-      const deleted = await deleteProjectRecord(id);
+      const deleted = await store.deleteProject(id);
       if (!deleted) {
         res.status(404).json({ error: 'Project not found.' });
         return;
@@ -400,7 +486,7 @@ async function startServer() {
   // Protected Admin: Restore Starter Projects
   app.post('/api/admin/projects/seed', requireAdmin, async (_req: AuthRequest, res: Response) => {
     try {
-      await seedDefaultProjectsRecords();
+      await store.seedDefaultProjects();
       broadcastRealtime('projects');
       res.json({ ok: true });
     } catch (error) {
@@ -420,7 +506,7 @@ async function startServer() {
       return;
     }
     try {
-      const saved = await upsertSkillRecord(parsed.data, true);
+      const saved = await store.upsertSkill(parsed.data, true);
       broadcastRealtime('skills');
       res.status(201).json({ skill: saved });
     } catch (error) {
@@ -442,7 +528,7 @@ async function startServer() {
       return;
     }
     try {
-      const saved = await upsertSkillRecord(parsed.data, false);
+      const saved = await store.upsertSkill(parsed.data, false);
       if (!saved) {
         res.status(404).json({ error: 'Skill not found.' });
         return;
@@ -463,7 +549,7 @@ async function startServer() {
       return;
     }
     try {
-      const deleted = await deleteSkillRecord(id);
+      const deleted = await store.deleteSkill(id);
       if (!deleted) {
         res.status(404).json({ error: 'Skill not found.' });
         return;
@@ -479,7 +565,7 @@ async function startServer() {
   // Protected Admin: Restore Default Skills
   app.post('/api/admin/skills/seed', requireAdmin, async (_req: AuthRequest, res: Response) => {
     try {
-      await seedDefaultSkillsRecords();
+      await store.seedDefaultSkills();
       broadcastRealtime('skills');
       res.json({ ok: true });
     } catch (error) {
@@ -494,7 +580,7 @@ async function startServer() {
     requireAdmin,
     async (_req: AuthRequest, res: Response) => {
       try {
-        await resetAnalyticsMetrics();
+        await store.resetAnalytics();
         broadcastRealtime('analytics');
         res.json({ ok: true });
       } catch (error) {
