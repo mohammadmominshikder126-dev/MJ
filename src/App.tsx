@@ -47,7 +47,16 @@ import {
 } from './lib/portfolioData';
 import { ADMIN_EMAIL, auth, db, handleFirestoreError, OperationType } from './lib/firebase';
 
+const ADMIN_ROUTE_PATH = '/Admin/login/mj';
+
+function isAdminRoutePath(pathname: string): boolean {
+  return pathname.replace(/\/+$/, '').toLowerCase() === '/admin/login/mj';
+}
+
 export default function App() {
+  const [isAdminRoute, setIsAdminRoute] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? isAdminRoutePath(window.location.pathname) : false
+  );
   const [activeNav, setActiveNav] = useState<string>('home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<ProjectCategory>('all');
@@ -84,12 +93,35 @@ export default function App() {
   };
 
   useEffect(() => {
+    const handlePopState = () => {
+      setIsAdminRoute(isAdminRoutePath(window.location.pathname));
+    };
+    window.addEventListener('popstate', handlePopState);
     return () => {
+      window.removeEventListener('popstate', handlePopState);
       if (toastTimerRef.current) {
         window.clearTimeout(toastTimerRef.current);
       }
     };
   }, []);
+
+  const navigateToAdmin = () => {
+    setMobileMenuOpen(false);
+    if (!isAdminRoutePath(window.location.pathname)) {
+      window.history.pushState({}, '', ADMIN_ROUTE_PATH);
+    }
+    setIsAdminRoute(true);
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  };
+
+  const navigateToHome = () => {
+    setAdminOpen(false);
+    if (isAdminRoutePath(window.location.pathname)) {
+      window.history.pushState({}, '', '/');
+    }
+    setIsAdminRoute(false);
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  };
 
   // Firebase Auth listener
   useEffect(() => {
@@ -272,6 +304,7 @@ export default function App() {
 
   // Scroll-spy for visible sections
   useEffect(() => {
+    if (isAdminRoute) return;
     const sectionIds = ['home', 'skills', 'portfolio', 'about'];
     const handleScroll = () => {
       const scrollPos = window.scrollY + 150;
@@ -287,7 +320,7 @@ export default function App() {
     window.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [isAdminRoute]);
 
   const scrollToSection = (id: string) => {
     setMobileMenuOpen(false);
@@ -410,6 +443,36 @@ export default function App() {
   const availabilityParts = siteConfig.availabilityText.split(' ');
   const availabilityLast = availabilityParts.length > 1 ? availabilityParts.pop() : '';
   const availabilityPrefix = availabilityParts.join(' ');
+
+  if (isAdminRoute) {
+    return (
+      <>
+        <AdminPanelModal
+          open={true}
+          standalone={true}
+          user={user}
+          isAdminUser={isAdminUser}
+          authReady={authReady}
+          projects={displayProjects}
+          hasFirestoreProjects={hasFirestoreProjects}
+          skills={displaySkills}
+          hasFirestoreSkills={hasFirestoreSkills}
+          siteConfig={siteConfig}
+          onClose={navigateToHome}
+          onNotify={showToast}
+        />
+        {toastMessage && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl border border-[#7c4dff]/70 bg-[#111b44]/95 text-xs sm:text-sm font-medium text-white shadow-[0_12px_32px_rgba(0,0,0,0.65)] backdrop-blur-md"
+          >
+            {toastMessage}
+          </div>
+        )}
+      </>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#05091d] text-[#f7f8ff] relative overflow-x-clip">
@@ -569,17 +632,17 @@ export default function App() {
                 <Send className="w-4 h-4" />
                 <span>{siteConfig.hireButtonText}</span>
               </a>
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  setAdminOpen(true);
+              <a
+                href={ADMIN_ROUTE_PATH}
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigateToAdmin();
                 }}
                 className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-[#324685] bg-[#0e173c] text-sm font-bold text-white cursor-pointer"
               >
                 <ShieldCheck className="w-4 h-4 text-[#a855f7]" />
                 <span>Admin Panel</span>
-              </button>
+              </a>
             </div>
           </div>
         )}
@@ -992,14 +1055,17 @@ export default function App() {
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => setAdminOpen(true)}
+            <a
+              href={ADMIN_ROUTE_PATH}
+              onClick={(e) => {
+                e.preventDefault();
+                navigateToAdmin();
+              }}
               className="inline-flex items-center gap-1.5 text-[#c4b5fd] hover:text-white font-semibold transition-colors cursor-pointer"
             >
               <ShieldCheck className="w-3.5 h-3.5 text-[#a855f7]" />
               <span>Admin Panel</span>
-            </button>
+            </a>
             <span className="text-[#4a5a8e]" aria-hidden="true">
               |
             </span>

@@ -61,6 +61,7 @@ interface AdminPanelModalProps {
   skills: SkillItem[];
   hasFirestoreSkills: boolean;
   siteConfig: SiteConfig;
+  standalone?: boolean;
   onClose: () => void;
   onNotify: (message: string) => void;
 }
@@ -117,6 +118,7 @@ export function AdminPanelModal({
   skills,
   hasFirestoreSkills,
   siteConfig,
+  standalone = false,
   onClose,
   onNotify,
 }: AdminPanelModalProps) {
@@ -231,13 +233,13 @@ export function AdminPanelModal({
   }, [siteConfig]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || standalone) return;
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [open, onClose]);
+  }, [open, standalone, onClose]);
 
   if (!open) return null;
 
@@ -679,15 +681,33 @@ export function AdminPanelModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
+      className={
+        standalone
+          ? 'min-h-screen bg-[#05091d] text-[#f7f8ff] relative flex items-start justify-center p-4 sm:py-10 sm:px-6 overflow-x-clip'
+          : 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm'
+      }
+      role={standalone ? 'main' : 'dialog'}
+      aria-modal={standalone ? undefined : true}
       aria-labelledby="admin-modal-title"
-      onClick={onClose}
+      onClick={standalone ? undefined : onClose}
     >
+      {standalone && (
+        <div
+          className="pointer-events-none fixed inset-0 z-0"
+          aria-hidden="true"
+          style={{
+            background:
+              'radial-gradient(ellipse 46% 36% at 80% 18%, rgba(45, 36, 178, 0.34), transparent 70%), radial-gradient(ellipse 40% 34% at 10% 65%, rgba(28, 22, 128, 0.25), transparent 72%)',
+          }}
+        />
+      )}
       <div
-        className="w-full max-w-3xl rounded-2xl border border-[#354888] bg-gradient-to-b from-[#11193f] to-[#080d24] p-5 sm:p-6 shadow-[0_24px_70px_rgba(0,0,0,0.78)] max-h-[92vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
+        className={
+          standalone
+            ? 'relative z-10 w-full max-w-3xl rounded-2xl border border-[#354888] bg-gradient-to-b from-[#11193f] to-[#080d24] p-5 sm:p-6 shadow-[0_24px_70px_rgba(0,0,0,0.78)]'
+            : 'w-full max-w-3xl rounded-2xl border border-[#354888] bg-gradient-to-b from-[#11193f] to-[#080d24] p-5 sm:p-6 shadow-[0_24px_70px_rgba(0,0,0,0.78)] max-h-[92vh] overflow-y-auto'
+        }
+        onClick={standalone ? undefined : (e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between gap-4 pb-4 border-b border-[#24346a]">
@@ -720,10 +740,21 @@ export function AdminPanelModal({
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close Admin Panel"
-              className="w-9 h-9 rounded-xl border border-[#2d3e76] bg-[#0e1636] text-[#c7d3f5] hover:text-white hover:border-[#7c4dff] grid place-items-center transition-colors cursor-pointer"
+              aria-label={standalone ? 'Back to Website' : 'Close Admin Panel'}
+              className={
+                standalone
+                  ? 'inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#2d3e76] bg-[#0e1636] text-xs font-semibold text-[#c7d3f5] hover:text-white hover:border-[#7c4dff] transition-colors cursor-pointer'
+                  : 'w-9 h-9 rounded-xl border border-[#2d3e76] bg-[#0e1636] text-[#c7d3f5] hover:text-white hover:border-[#7c4dff] grid place-items-center transition-colors cursor-pointer'
+              }
             >
-              <X className="w-4 h-4" />
+              {standalone ? (
+                <>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>View Site</span>
+                </>
+              ) : (
+                <X className="w-4 h-4" />
+              )}
             </button>
           </div>
         </div>
