@@ -11,6 +11,7 @@ import {
 import {
   CheckCircle2,
   Code2,
+  Copy,
   ExternalLink,
   ImagePlus,
   LayoutTemplate,
@@ -45,6 +46,7 @@ import {
   ADMIN_EMAIL,
   auth,
   db,
+  FIREBASE_PROJECT_ID,
   googleProvider,
   handleFirestoreError,
   OperationType,
@@ -125,6 +127,7 @@ export function AdminPanelModal({
   const [activeTab, setActiveTab] = useState<AdminTab>('upload');
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [unauthorizedHost, setUnauthorizedHost] = useState<string | null>(null);
 
   // Project Upload / Edit Form State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -245,12 +248,30 @@ export function AdminPanelModal({
 
   const handleGoogleLogin = async () => {
     setAuthError(null);
+    setUnauthorizedHost(null);
     setAuthBusy(true);
     try {
       await signInWithPopup(auth, googleProvider);
       onNotify('Signed in with Google');
     } catch (err) {
-      setAuthError(err instanceof Error ? err.message : 'Google sign-in failed.');
+      const code =
+        typeof err === 'object' && err !== null && 'code' in err
+          ? String((err as { code?: unknown }).code)
+          : '';
+      const message = err instanceof Error ? err.message : 'Google sign-in failed.';
+      if (code === 'auth/unauthorized-domain' || message.includes('unauthorized-domain')) {
+        const host = typeof window !== 'undefined' ? window.location.hostname : '';
+        setUnauthorizedHost(host || 'your-domain.workers.dev');
+        setAuthError(
+          `Domain "${host}" needs to be added to Firebase Authentication → Authorized domains before Google Sign-In works on this URL.`
+        );
+      } else if (code === 'auth/popup-blocked' || message.includes('popup-blocked')) {
+        setAuthError(
+          'Sign-in popup was blocked by your browser. Please allow popups for this site and tap Sign in with Google again.'
+        );
+      } else {
+        setAuthError(message);
+      }
     } finally {
       setAuthBusy(false);
     }
@@ -770,8 +791,32 @@ export function AdminPanelModal({
             </div>
 
             {authError && (
-              <div className="rounded-xl border border-[#f43f5e]/50 bg-[#3a0d1e]/60 px-3.5 py-2 text-xs text-[#fecdd3]">
-                {authError}
+              <div className="rounded-xl border border-[#f43f5e]/50 bg-[#3a0d1e]/60 p-3.5 text-xs text-[#fecdd3] text-left space-y-2.5">
+                <p className="leading-relaxed">{authError}</p>
+                {unauthorizedHost && (
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(unauthorizedHost);
+                        onNotify(`Copied "${unauthorizedHost}"`);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#4b5e9c] bg-[#10193c] text-[11px] font-semibold text-white hover:border-[#a855f7] cursor-pointer"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>Copy: {unauthorizedHost}</span>
+                    </button>
+                    <a
+                      href={`https://console.firebase.google.com/project/${FIREBASE_PROJECT_ID}/authentication/settings`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#7c3aed] text-[11px] font-semibold text-white hover:brightness-110"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>Open Firebase Authorized Domains</span>
+                    </a>
+                  </div>
+                )}
               </div>
             )}
 
