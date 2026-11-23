@@ -164,8 +164,8 @@ export function InfoModal({ mode, siteConfig, onClose }: InfoModalProps) {
 
   const content = {
     about: {
-      title: `About ${siteConfig.brandName}`,
-      body: `${siteConfig.brandName} is a dedicated web developer focused on crafting clean, fast, and responsive websites for businesses, creators, and online stores. From semantic HTML5 & CSS3 foundations to full React, Tailwind CSS, Firebase, and Supabase integrations, every project is built for real-world speed and intuitive usability.`,
+      title: siteConfig.aboutTitle,
+      body: siteConfig.aboutDescription,
       bullets: [
         'Custom responsive websites & personal brand portfolios',
         'High-converting e-commerce storefronts and product catalogs',
@@ -174,7 +174,7 @@ export function InfoModal({ mode, siteConfig, onClose }: InfoModalProps) {
     },
     privacy: {
       title: 'Privacy Policy',
-      body: 'Visitor interactions and WhatsApp/Telegram inquiries go directly to your chosen messaging app. No personal visitor contact forms are stored on third-party ad networks.',
+      body: siteConfig.privacyPolicyText,
       bullets: [
         'Direct communication via WhatsApp and Telegram',
         'No invasive tracking cookies or third-party ad scripts',
@@ -182,7 +182,7 @@ export function InfoModal({ mode, siteConfig, onClose }: InfoModalProps) {
     },
     terms: {
       title: 'Terms & Conditions',
-      body: `All portfolio designs, case study previews, and code samples showcased on this site belong to ${siteConfig.brandName}. Project timelines, milestones, and deliverables for freelance work are agreed upon in writing before kickoff.`,
+      body: siteConfig.termsText,
       bullets: [
         'Custom project scopes are confirmed prior to development',
         'Responsive cross-browser testing included on all web builds',

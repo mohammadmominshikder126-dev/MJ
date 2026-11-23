@@ -32,56 +32,62 @@ service cloud.firestore {
       );
     }
 
-    function isValidSiteConfig(data) {
+    function isValidSiteKeys(data) {
       return data.keys().hasAll([
-        'brandName',
-        'brandSubtitle',
-        'logoUrl',
-        'availabilityText',
-        'bannerGreeting',
-        'bannerHighlight',
-        'bannerSubtitle',
-        'bannerDescription',
-        'bannerImageUrl',
-        'whatsappNumber',
-        'whatsappGreeting',
-        'telegramGroupUrl',
-        'facebookUrl',
-        'youtubeUrl',
-        'githubUrl',
-        'linkedinUrl',
-        'updatedAt',
-        'updatedBy'
+        'brandName', 'brandSubtitle', 'logoUrl', 'hireButtonText', 'availabilityText',
+        'bannerGreeting', 'bannerHighlight', 'bannerSubtitle', 'bannerDescription', 'bannerImageUrl',
+        'portfolioCtaText', 'contactCtaText', 'skillsHeading', 'portfolioHeading', 'portfolioSubheading',
+        'aboutTitle', 'aboutDescription', 'aboutImageUrl',
+        'quickCard1Title', 'quickCard1Subtitle', 'quickCard2Title', 'quickCard2Subtitle',
+        'quickCard3Title', 'quickCard3Subtitle', 'whatsappNumber', 'whatsappGreeting',
+        'telegramGroupUrl', 'facebookUrl', 'youtubeUrl', 'githubUrl', 'linkedinUrl',
+        'footerRightsText', 'footerCreditText', 'privacyPolicyText', 'termsText',
+        'updatedAt', 'updatedBy'
       ]) && data.keys().hasOnly([
-        'brandName',
-        'brandSubtitle',
-        'logoUrl',
-        'availabilityText',
-        'bannerGreeting',
-        'bannerHighlight',
-        'bannerSubtitle',
-        'bannerDescription',
-        'bannerImageUrl',
-        'whatsappNumber',
-        'whatsappGreeting',
-        'telegramGroupUrl',
-        'facebookUrl',
-        'youtubeUrl',
-        'githubUrl',
-        'linkedinUrl',
-        'updatedAt',
-        'updatedBy'
-      ]) &&
-      data.brandName is string && data.brandName.size() >= 1 && data.brandName.size() <= 60 &&
+        'brandName', 'brandSubtitle', 'logoUrl', 'hireButtonText', 'availabilityText',
+        'bannerGreeting', 'bannerHighlight', 'bannerSubtitle', 'bannerDescription', 'bannerImageUrl',
+        'portfolioCtaText', 'contactCtaText', 'skillsHeading', 'portfolioHeading', 'portfolioSubheading',
+        'aboutTitle', 'aboutDescription', 'aboutImageUrl',
+        'quickCard1Title', 'quickCard1Subtitle', 'quickCard2Title', 'quickCard2Subtitle',
+        'quickCard3Title', 'quickCard3Subtitle', 'whatsappNumber', 'whatsappGreeting',
+        'telegramGroupUrl', 'facebookUrl', 'youtubeUrl', 'githubUrl', 'linkedinUrl',
+        'footerRightsText', 'footerCreditText', 'privacyPolicyText', 'termsText',
+        'updatedAt', 'updatedBy'
+      ]);
+    }
+
+    function isValidSiteBrandAndBanner(data) {
+      return data.brandName is string && data.brandName.size() >= 1 && data.brandName.size() <= 60 &&
       data.brandSubtitle is string && data.brandSubtitle.size() >= 1 && data.brandSubtitle.size() <= 60 &&
       data.logoUrl is string && data.logoUrl.size() <= 350000 &&
+      data.hireButtonText is string && data.hireButtonText.size() >= 1 && data.hireButtonText.size() <= 40 &&
       data.availabilityText is string && data.availabilityText.size() >= 1 && data.availabilityText.size() <= 80 &&
       data.bannerGreeting is string && data.bannerGreeting.size() >= 1 && data.bannerGreeting.size() <= 60 &&
       data.bannerHighlight is string && data.bannerHighlight.size() >= 1 && data.bannerHighlight.size() <= 60 &&
       data.bannerSubtitle is string && data.bannerSubtitle.size() >= 1 && data.bannerSubtitle.size() <= 100 &&
       data.bannerDescription is string && data.bannerDescription.size() >= 1 && data.bannerDescription.size() <= 300 &&
       data.bannerImageUrl is string && data.bannerImageUrl.size() <= 350000 &&
-      data.whatsappNumber is string && data.whatsappNumber.size() >= 7 && data.whatsappNumber.size() <= 20 &&
+      data.portfolioCtaText is string && data.portfolioCtaText.size() >= 1 && data.portfolioCtaText.size() <= 40 &&
+      data.contactCtaText is string && data.contactCtaText.size() >= 1 && data.contactCtaText.size() <= 40;
+    }
+
+    function isValidSiteSections(data) {
+      return data.skillsHeading is string && data.skillsHeading.size() >= 1 && data.skillsHeading.size() <= 60 &&
+      data.portfolioHeading is string && data.portfolioHeading.size() >= 1 && data.portfolioHeading.size() <= 60 &&
+      data.portfolioSubheading is string && data.portfolioSubheading.size() >= 1 && data.portfolioSubheading.size() <= 120 &&
+      data.aboutTitle is string && data.aboutTitle.size() >= 1 && data.aboutTitle.size() <= 60 &&
+      data.aboutDescription is string && data.aboutDescription.size() >= 1 && data.aboutDescription.size() <= 500 &&
+      data.aboutImageUrl is string && data.aboutImageUrl.size() <= 350000 &&
+      data.quickCard1Title is string && data.quickCard1Title.size() >= 1 && data.quickCard1Title.size() <= 60 &&
+      data.quickCard1Subtitle is string && data.quickCard1Subtitle.size() >= 1 && data.quickCard1Subtitle.size() <= 120 &&
+      data.quickCard2Title is string && data.quickCard2Title.size() >= 1 && data.quickCard2Title.size() <= 60 &&
+      data.quickCard2Subtitle is string && data.quickCard2Subtitle.size() >= 1 && data.quickCard2Subtitle.size() <= 120 &&
+      data.quickCard3Title is string && data.quickCard3Title.size() >= 1 && data.quickCard3Title.size() <= 60 &&
+      data.quickCard3Subtitle is string && data.quickCard3Subtitle.size() >= 1 && data.quickCard3Subtitle.size() <= 120;
+    }
+
+    function isValidSiteSocialAndFooter(data) {
+      return data.whatsappNumber is string && data.whatsappNumber.size() >= 7 && data.whatsappNumber.size() <= 20 &&
       data.whatsappNumber.matches('^[0-9+\\-\\s]{7,20}$') &&
       data.whatsappGreeting is string && data.whatsappGreeting.size() >= 1 && data.whatsappGreeting.size() <= 160 &&
       data.telegramGroupUrl is string && data.telegramGroupUrl.size() <= 240 &&
@@ -89,41 +95,45 @@ service cloud.firestore {
       data.youtubeUrl is string && data.youtubeUrl.size() <= 240 &&
       data.githubUrl is string && data.githubUrl.size() <= 240 &&
       data.linkedinUrl is string && data.linkedinUrl.size() <= 240 &&
+      data.footerRightsText is string && data.footerRightsText.size() >= 1 && data.footerRightsText.size() <= 120 &&
+      data.footerCreditText is string && data.footerCreditText.size() >= 1 && data.footerCreditText.size() <= 120 &&
+      data.privacyPolicyText is string && data.privacyPolicyText.size() >= 1 && data.privacyPolicyText.size() <= 800 &&
+      data.termsText is string && data.termsText.size() >= 1 && data.termsText.size() <= 800 &&
       data.updatedAt is timestamp && data.updatedAt == request.time &&
       data.updatedBy is string && data.updatedBy == request.auth.uid && data.updatedBy.size() <= 128;
     }
 
+    function isValidSiteConfig(data) {
+      return isValidSiteKeys(data) &&
+        isValidSiteBrandAndBanner(data) &&
+        isValidSiteSections(data) &&
+        isValidSiteSocialAndFooter(data);
+    }
+
+    function isValidSkill(data) {
+      return data.keys().hasAll([
+        'name', 'role', 'iconKey', 'order', 'authorId', 'createdAt', 'updatedAt'
+      ]) && data.keys().hasOnly([
+        'name', 'role', 'iconKey', 'order', 'authorId', 'createdAt', 'updatedAt'
+      ]) &&
+      data.name is string && data.name.size() >= 1 && data.name.size() <= 40 &&
+      data.role is string && data.role.size() >= 1 && data.role.size() <= 60 &&
+      data.iconKey is string && data.iconKey.size() >= 1 && data.iconKey.size() <= 30 &&
+      (data.order is int || data.order is float) && data.order >= 0 && data.order <= 1000 &&
+      data.authorId is string && data.authorId.size() <= 128 &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
     function isValidProject(data) {
       return data.keys().hasAll([
-        'title',
-        'category',
-        'categoryLabel',
-        'description',
-        'longDescription',
-        'year',
-        'techStack',
-        'highlights',
-        'previewType',
-        'liveUrl',
-        'thumbnailUrl',
-        'authorId',
-        'createdAt',
-        'updatedAt'
+        'title', 'category', 'categoryLabel', 'description', 'longDescription',
+        'year', 'techStack', 'highlights', 'previewType', 'liveUrl', 'thumbnailUrl',
+        'authorId', 'createdAt', 'updatedAt'
       ]) && data.keys().hasOnly([
-        'title',
-        'category',
-        'categoryLabel',
-        'description',
-        'longDescription',
-        'year',
-        'techStack',
-        'highlights',
-        'previewType',
-        'liveUrl',
-        'thumbnailUrl',
-        'authorId',
-        'createdAt',
-        'updatedAt'
+        'title', 'category', 'categoryLabel', 'description', 'longDescription',
+        'year', 'techStack', 'highlights', 'previewType', 'liveUrl', 'thumbnailUrl',
+        'authorId', 'createdAt', 'updatedAt'
       ]) &&
       data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
       data.category is string && data.category in ['business', 'ecommerce', 'web-apps'] &&
@@ -149,26 +159,34 @@ service cloud.firestore {
       allow create: if isAdmin() && configId == 'main' && isValidSiteConfig(incoming());
       allow update: if isAdmin() && configId == 'main' && isValidSiteConfig(incoming()) &&
         incoming().diff(existing()).affectedKeys().hasOnly([
-          'brandName',
-          'brandSubtitle',
-          'logoUrl',
-          'availabilityText',
-          'bannerGreeting',
-          'bannerHighlight',
-          'bannerSubtitle',
-          'bannerDescription',
-          'bannerImageUrl',
-          'whatsappNumber',
-          'whatsappGreeting',
-          'telegramGroupUrl',
-          'facebookUrl',
-          'youtubeUrl',
-          'githubUrl',
-          'linkedinUrl',
-          'updatedAt',
-          'updatedBy'
+          'brandName', 'brandSubtitle', 'logoUrl', 'hireButtonText', 'availabilityText',
+          'bannerGreeting', 'bannerHighlight', 'bannerSubtitle', 'bannerDescription', 'bannerImageUrl',
+          'portfolioCtaText', 'contactCtaText', 'skillsHeading', 'portfolioHeading', 'portfolioSubheading',
+          'aboutTitle', 'aboutDescription', 'aboutImageUrl',
+          'quickCard1Title', 'quickCard1Subtitle', 'quickCard2Title', 'quickCard2Subtitle',
+          'quickCard3Title', 'quickCard3Subtitle', 'whatsappNumber', 'whatsappGreeting',
+          'telegramGroupUrl', 'facebookUrl', 'youtubeUrl', 'githubUrl', 'linkedinUrl',
+          'footerRightsText', 'footerCreditText', 'privacyPolicyText', 'termsText',
+          'updatedAt', 'updatedBy'
         ]);
       allow delete: if false;
+    }
+
+    match /skills/{skillId} {
+      allow get: if isValidId(skillId);
+      allow list: if resource.data.order >= 0;
+      allow create: if isAdmin() && isValidId(skillId) && isValidSkill(incoming()) &&
+        incoming().authorId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(skillId) && isValidSkill(incoming()) &&
+        incoming().authorId == existing().authorId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'role', 'iconKey', 'order', 'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(skillId);
     }
 
     match /projects/{projectId} {
@@ -183,18 +201,8 @@ service cloud.firestore {
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&
         incoming().diff(existing()).affectedKeys().hasOnly([
-          'title',
-          'category',
-          'categoryLabel',
-          'description',
-          'longDescription',
-          'year',
-          'techStack',
-          'highlights',
-          'previewType',
-          'liveUrl',
-          'thumbnailUrl',
-          'updatedAt'
+          'title', 'category', 'categoryLabel', 'description', 'longDescription',
+          'year', 'techStack', 'highlights', 'previewType', 'liveUrl', 'thumbnailUrl', 'updatedAt'
         ]);
       allow delete: if isAdmin() && isValidId(projectId);
     }

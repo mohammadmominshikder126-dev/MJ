@@ -35,6 +35,7 @@ import {
   buildWhatsAppUrl,
   DEFAULT_PROJECTS,
   DEFAULT_SITE_CONFIG,
+  DEFAULT_SKILLS,
   FILTER_TABS,
   isSafeHttpUrl,
   isSafeImageSrc,
@@ -42,7 +43,7 @@ import {
   ProjectCategory,
   ProjectItem,
   SiteConfig,
-  SKILLS,
+  SkillItem,
 } from './data/portfolioData';
 import { ADMIN_EMAIL, auth, db, handleFirestoreError, OperationType } from './lib/firebase';
 
@@ -56,6 +57,8 @@ export default function App() {
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(DEFAULT_SITE_CONFIG);
   const [firestoreProjects, setFirestoreProjects] = useState<ProjectItem[]>([]);
   const [hasFirestoreProjects, setHasFirestoreProjects] = useState<boolean>(false);
+  const [firestoreSkills, setFirestoreSkills] = useState<SkillItem[]>([]);
+  const [hasFirestoreSkills, setHasFirestoreSkills] = useState<boolean>(false);
 
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isAdminUser, setIsAdminUser] = useState<boolean>(false);
@@ -114,7 +117,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Real-time Firestore listener: siteConfig/main
+  // Real-time Firestore listener: siteConfig/main (Full A-to-Z Site Controls)
   useEffect(() => {
     const configRef = doc(db, 'siteConfig', 'main');
     const unsubscribe = onSnapshot(
@@ -127,16 +130,32 @@ export default function App() {
         const data = snap.data() as Partial<SiteConfig>;
         setLogoImgFailed(false);
         setHeroArtFailed(false);
+        setAboutLaptopFailed(false);
         setSiteConfig({
           brandName: data.brandName || DEFAULT_SITE_CONFIG.brandName,
           brandSubtitle: data.brandSubtitle || DEFAULT_SITE_CONFIG.brandSubtitle,
           logoUrl: data.logoUrl || '',
+          hireButtonText: data.hireButtonText || DEFAULT_SITE_CONFIG.hireButtonText,
           availabilityText: data.availabilityText || DEFAULT_SITE_CONFIG.availabilityText,
           bannerGreeting: data.bannerGreeting || DEFAULT_SITE_CONFIG.bannerGreeting,
           bannerHighlight: data.bannerHighlight || DEFAULT_SITE_CONFIG.bannerHighlight,
           bannerSubtitle: data.bannerSubtitle || DEFAULT_SITE_CONFIG.bannerSubtitle,
           bannerDescription: data.bannerDescription || DEFAULT_SITE_CONFIG.bannerDescription,
           bannerImageUrl: data.bannerImageUrl || DEFAULT_SITE_CONFIG.bannerImageUrl,
+          portfolioCtaText: data.portfolioCtaText || DEFAULT_SITE_CONFIG.portfolioCtaText,
+          contactCtaText: data.contactCtaText || DEFAULT_SITE_CONFIG.contactCtaText,
+          skillsHeading: data.skillsHeading || DEFAULT_SITE_CONFIG.skillsHeading,
+          portfolioHeading: data.portfolioHeading || DEFAULT_SITE_CONFIG.portfolioHeading,
+          portfolioSubheading: data.portfolioSubheading || DEFAULT_SITE_CONFIG.portfolioSubheading,
+          aboutTitle: data.aboutTitle || DEFAULT_SITE_CONFIG.aboutTitle,
+          aboutDescription: data.aboutDescription || DEFAULT_SITE_CONFIG.aboutDescription,
+          aboutImageUrl: data.aboutImageUrl || DEFAULT_SITE_CONFIG.aboutImageUrl,
+          quickCard1Title: data.quickCard1Title || DEFAULT_SITE_CONFIG.quickCard1Title,
+          quickCard1Subtitle: data.quickCard1Subtitle || DEFAULT_SITE_CONFIG.quickCard1Subtitle,
+          quickCard2Title: data.quickCard2Title || DEFAULT_SITE_CONFIG.quickCard2Title,
+          quickCard2Subtitle: data.quickCard2Subtitle || DEFAULT_SITE_CONFIG.quickCard2Subtitle,
+          quickCard3Title: data.quickCard3Title || DEFAULT_SITE_CONFIG.quickCard3Title,
+          quickCard3Subtitle: data.quickCard3Subtitle || DEFAULT_SITE_CONFIG.quickCard3Subtitle,
           whatsappNumber: data.whatsappNumber || DEFAULT_SITE_CONFIG.whatsappNumber,
           whatsappGreeting: data.whatsappGreeting || DEFAULT_SITE_CONFIG.whatsappGreeting,
           telegramGroupUrl: data.telegramGroupUrl ?? DEFAULT_SITE_CONFIG.telegramGroupUrl,
@@ -144,10 +163,46 @@ export default function App() {
           youtubeUrl: data.youtubeUrl ?? DEFAULT_SITE_CONFIG.youtubeUrl,
           githubUrl: data.githubUrl ?? DEFAULT_SITE_CONFIG.githubUrl,
           linkedinUrl: data.linkedinUrl ?? DEFAULT_SITE_CONFIG.linkedinUrl,
+          footerRightsText: data.footerRightsText || DEFAULT_SITE_CONFIG.footerRightsText,
+          footerCreditText: data.footerCreditText || DEFAULT_SITE_CONFIG.footerCreditText,
+          privacyPolicyText: data.privacyPolicyText || DEFAULT_SITE_CONFIG.privacyPolicyText,
+          termsText: data.termsText || DEFAULT_SITE_CONFIG.termsText,
         });
       },
       (error) => {
         handleFirestoreError(error, OperationType.GET, 'siteConfig/main');
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  // Real-time Firestore listener: skills collection (matches firestore.rules allow list: resource.data.order >= 0)
+  useEffect(() => {
+    const skillsQuery = query(collection(db, 'skills'), where('order', '>=', 0));
+    const unsubscribe = onSnapshot(
+      skillsQuery,
+      (snapshot) => {
+        if (snapshot.empty) {
+          setFirestoreSkills([]);
+          setHasFirestoreSkills(false);
+          return;
+        }
+        const rows: SkillItem[] = snapshot.docs.map((docSnap) => {
+          const d = docSnap.data() as Record<string, unknown>;
+          return {
+            id: docSnap.id,
+            name: String(d.name || 'Skill'),
+            role: String(d.role || 'Web Development'),
+            iconKey: String(d.iconKey || 'custom'),
+            order: typeof d.order === 'number' ? d.order : 0,
+          };
+        });
+        rows.sort((a, b) => a.order - b.order);
+        setFirestoreSkills(rows);
+        setHasFirestoreSkills(true);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'skills');
       }
     );
     return () => unsubscribe();
@@ -243,6 +298,7 @@ export default function App() {
     }
   };
 
+  const displaySkills = hasFirestoreSkills ? firestoreSkills : DEFAULT_SKILLS;
   const displayProjects = hasFirestoreProjects ? firestoreProjects : DEFAULT_PROJECTS;
   const filteredProjects =
     selectedCategory === 'all'
@@ -259,6 +315,10 @@ export default function App() {
     isSafeImageSrc(siteConfig.bannerImageUrl) && !heroArtFailed
       ? siteConfig.bannerImageUrl
       : '/assets/crops/hero_art.png';
+  const safeAboutImgUrl =
+    isSafeImageSrc(siteConfig.aboutImageUrl) && !aboutLaptopFailed
+      ? siteConfig.aboutImageUrl
+      : '/assets/crops/about_laptop.png';
 
   const renderNavIcon = (id: string) => {
     const cls = 'w-3.5 h-3.5 shrink-0';
@@ -311,22 +371,22 @@ export default function App() {
   const bottomQuickCards = [
     {
       id: 'quick-skill',
-      title: 'My Skill',
-      subtitle: 'HTML5, CSS3, JavaScript, React & Tailwind CSS solutions',
+      title: siteConfig.quickCard1Title,
+      subtitle: siteConfig.quickCard1Subtitle,
       icon: <Code2 className="w-5 h-5 text-[#38bdf8]" />,
       accentBorder: 'hover:border-[#38bdf8]/70',
       iconBox: 'from-[#0ea5e9]/25 to-[#3b82f6]/25 border-[#38bdf8]/40',
-      whatsappText: `${siteConfig.whatsappGreeting} I want to work with you based on your web development skills.`,
+      whatsappText: `${siteConfig.whatsappGreeting} I want to work with you on "${siteConfig.quickCard1Title}".`,
       onCardAction: () => scrollToSection('skills'),
     },
     {
       id: 'quick-ecommerce',
-      title: 'E-Commerce Website',
-      subtitle: 'Online store, product catalog, cart & secure checkout',
+      title: siteConfig.quickCard2Title,
+      subtitle: siteConfig.quickCard2Subtitle,
       icon: <ShoppingBag className="w-5 h-5 text-[#a855f7]" />,
       accentBorder: 'hover:border-[#a855f7]/70',
       iconBox: 'from-[#a855f7]/25 to-[#6366f1]/25 border-[#a855f7]/40',
-      whatsappText: `${siteConfig.whatsappGreeting} I would like to build an E-Commerce Website.`,
+      whatsappText: `${siteConfig.whatsappGreeting} I would like to build a "${siteConfig.quickCard2Title}".`,
       onCardAction: () => {
         setSelectedCategory('ecommerce');
         scrollToSection('portfolio');
@@ -334,12 +394,12 @@ export default function App() {
     },
     {
       id: 'quick-business',
-      title: 'Business Website',
-      subtitle: 'Professional company, agency & service websites',
+      title: siteConfig.quickCard3Title,
+      subtitle: siteConfig.quickCard3Subtitle,
       icon: <Building2 className="w-5 h-5 text-[#22d3ee]" />,
       accentBorder: 'hover:border-[#22d3ee]/70',
       iconBox: 'from-[#06b6d4]/25 to-[#3b82f6]/25 border-[#22d3ee]/40',
-      whatsappText: `${siteConfig.whatsappGreeting} I would like to build a Business Website.`,
+      whatsappText: `${siteConfig.whatsappGreeting} I would like to build a "${siteConfig.quickCard3Title}".`,
       onCardAction: () => {
         setSelectedCategory('business');
         scrollToSection('portfolio');
@@ -444,7 +504,7 @@ export default function App() {
               className="hidden sm:inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#a63fff] to-[#6832ff] text-[13px] font-bold text-white shadow-[0_6px_22px_rgba(128,53,255,0.48)] hover:brightness-110 active:scale-[0.98] transition-all duration-150 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c084fc]"
             >
               <Send className="w-3.5 h-3.5" />
-              <span>Hire Me</span>
+              <span>{siteConfig.hireButtonText}</span>
             </a>
 
             <button
@@ -507,7 +567,7 @@ export default function App() {
                 className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-[#a63fff] to-[#6832ff] text-sm font-bold text-white shadow-lg"
               >
                 <Send className="w-4 h-4" />
-                <span>Hire Me</span>
+                <span>{siteConfig.hireButtonText}</span>
               </a>
               <button
                 type="button"
@@ -571,7 +631,7 @@ export default function App() {
                   className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-full bg-gradient-to-r from-[#b445ff] via-[#8433ff] to-[#5938ff] text-sm font-bold text-white shadow-[0_10px_28px_rgba(130,52,255,0.48)] hover:-translate-y-0.5 hover:brightness-110 transition-all duration-150 cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c084fc]"
                 >
                   <Rocket className="w-4 h-4" />
-                  <span>View My Portfolio</span>
+                  <span>{siteConfig.portfolioCtaText}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
 
@@ -582,7 +642,7 @@ export default function App() {
                   className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-full border border-[#7282b4] bg-[#09102d]/85 text-sm font-bold text-white hover:border-[#22c55e] hover:bg-[#0b252c] hover:-translate-y-0.5 transition-all duration-150 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]"
                 >
                   <MessageCircle className="w-4 h-4 text-[#4ade80]" />
-                  <span>Contact Me</span>
+                  <span>{siteConfig.contactCtaText}</span>
                 </a>
               </div>
 
@@ -644,13 +704,13 @@ export default function App() {
             <div className="flex items-center justify-center gap-4 mb-6">
               <span className="h-[3px] w-12 sm:w-20 rounded-full bg-gradient-to-r from-transparent via-[#9d35ff] to-[#3478ff]" />
               <h2 className="font-display text-[24px] sm:text-[28px] font-extrabold tracking-tight text-white">
-                My Skills
+                {siteConfig.skillsHeading}
               </h2>
               <span className="h-[3px] w-12 sm:w-20 rounded-full bg-gradient-to-l from-transparent via-[#9d35ff] to-[#3478ff]" />
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 sm:gap-3.5">
-              {SKILLS.map((skill) => {
+              {displaySkills.map((skill) => {
                 const skillWhatsappHref = buildWhatsAppUrl(
                   siteConfig.whatsappNumber,
                   `${siteConfig.whatsappGreeting} I want to hire you for a ${skill.name} (${skill.role}) project.`
@@ -662,9 +722,9 @@ export default function App() {
                   >
                     <div>
                       <div className="transition-transform duration-150 group-hover:scale-105">
-                        <SkillIcon id={skill.id} />
+                        <SkillIcon id={skill.iconKey} />
                       </div>
-                      <span className="mt-2.5 block text-[13px] font-bold text-[#eef2ff] whitespace-nowrap">
+                      <span className="mt-2.5 block text-[13px] font-bold text-[#eef2ff] truncate max-w-full">
                         {skill.name}
                       </span>
                     </div>
@@ -676,7 +736,7 @@ export default function App() {
                       className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-[#1f5e48] bg-[#082b27]/85 text-[10px] font-semibold text-[#6ee7b7] hover:bg-[#16a34a] hover:text-white hover:border-[#22c55e] transition-colors whitespace-nowrap"
                     >
                       <MessageCircle className="w-2.5 h-2.5 shrink-0" />
-                      <span>Contact Me</span>
+                      <span>{siteConfig.contactCtaText}</span>
                     </a>
                   </div>
                 );
@@ -692,12 +752,12 @@ export default function App() {
               <div className="flex items-center justify-center gap-4">
                 <span className="h-[3px] w-12 sm:w-20 rounded-full bg-gradient-to-r from-transparent via-[#9d35ff] to-[#3478ff]" />
                 <h2 className="font-display text-[24px] sm:text-[28px] font-extrabold tracking-tight text-white">
-                  My Portfolio
+                  {siteConfig.portfolioHeading}
                 </h2>
                 <span className="h-[3px] w-12 sm:w-20 rounded-full bg-gradient-to-l from-transparent via-[#9d35ff] to-[#3478ff]" />
               </div>
               <p className="mt-1 text-xs sm:text-[13px] text-[#b8c4e4]">
-                Some of my recent projects
+                {siteConfig.portfolioSubheading}
               </p>
 
               <button
@@ -794,7 +854,7 @@ export default function App() {
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#1f624a] bg-[#082c27]/90 text-[11px] font-bold text-[#6ee7b7] hover:bg-[#16a34a] hover:text-white hover:border-[#22c55e] transition-all whitespace-nowrap"
                         >
                           <MessageCircle className="w-3 h-3" />
-                          <span>Contact Me</span>
+                          <span>{siteConfig.contactCtaText}</span>
                         </a>
 
                         <button
@@ -833,14 +893,12 @@ export default function App() {
                     <User className="w-5 h-5" />
                   </div>
                   <h2 className="font-display text-[22px] sm:text-[26px] font-extrabold text-white">
-                    About Me
+                    {siteConfig.aboutTitle}
                   </h2>
                 </div>
 
                 <p className="text-[13.5px] sm:text-sm leading-[1.7] text-[#c2cde9]">
-                  I&apos;m {siteConfig.brandName}, a dedicated Web Developer with a passion for
-                  creating innovative and user-friendly web solutions. I always try to learn new
-                  technologies and deliver the best quality work.
+                  {siteConfig.aboutDescription}
                 </p>
 
                 <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -870,11 +928,11 @@ export default function App() {
               {!aboutLaptopFailed && (
                 <div className="hidden sm:block pointer-events-none absolute right-2 bottom-0 w-[230px] md:w-[270px] h-[220px]">
                   <img
-                    src="/assets/crops/about_laptop.png"
-                    alt="Developer laptop displaying code icon"
+                    src={safeAboutImgUrl}
+                    alt={`${siteConfig.aboutTitle} visual`}
                     referrerPolicy="no-referrer"
                     onError={() => setAboutLaptopFailed(true)}
-                    className="w-full h-full object-contain object-bottom about-laptop-mask select-none"
+                    className="w-full h-full object-contain object-bottom about-laptop-mask select-none rounded-xl"
                   />
                 </div>
               )}
@@ -912,7 +970,7 @@ export default function App() {
                     className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-full border border-[#1f624a] bg-[#082c27]/90 text-[11px] font-bold text-[#6ee7b7] hover:bg-[#16a34a] hover:text-white hover:border-[#22c55e] transition-colors whitespace-nowrap"
                   >
                     <MessageCircle className="w-3.5 h-3.5" />
-                    <span>Contact Me</span>
+                    <span>{siteConfig.contactCtaText}</span>
                   </a>
                 </div>
               ))}
@@ -926,16 +984,11 @@ export default function App() {
         <div className="max-w-[1160px] mx-auto px-4 sm:px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] sm:text-xs text-[#b8c4e4]">
           <div>
             <span className="font-bold text-white">{siteConfig.brandName}</span> &copy;{' '}
-            <span className="tabular-nums">{currentYear}</span>. All Rights Reserved.
+            <span className="tabular-nums">{currentYear}</span>. {siteConfig.footerRightsText}
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span>Made with</span>
-            <span className="text-[#ef4444]" aria-label="love">
-              &#9829;
-            </span>
-            <span>by</span>
-            <span className="font-bold text-[#a855f7]">{siteConfig.brandName}</span>
+            <span>{siteConfig.footerCreditText}</span>
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-3">
@@ -996,6 +1049,8 @@ export default function App() {
         authReady={authReady}
         projects={displayProjects}
         hasFirestoreProjects={hasFirestoreProjects}
+        skills={displaySkills}
+        hasFirestoreSkills={hasFirestoreSkills}
         siteConfig={siteConfig}
         onClose={() => setAdminOpen(false)}
         onNotify={showToast}

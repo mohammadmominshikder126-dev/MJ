@@ -2,18 +2,33 @@
   "entities": {
     "SiteConfig": {
       "title": "SiteConfig",
-      "description": "Global portfolio banner, logo, WhatsApp, and Telegram group configuration.",
+      "description": "Global A-to-Z portfolio configuration for branding, banner, headings, about, service cards, WhatsApp, Telegram group, and footer.",
       "type": "object",
       "properties": {
         "brandName": { "type": "string", "minLength": 1, "maxLength": 60 },
         "brandSubtitle": { "type": "string", "minLength": 1, "maxLength": 60 },
         "logoUrl": { "type": "string", "maxLength": 350000 },
+        "hireButtonText": { "type": "string", "minLength": 1, "maxLength": 40 },
         "availabilityText": { "type": "string", "minLength": 1, "maxLength": 80 },
         "bannerGreeting": { "type": "string", "minLength": 1, "maxLength": 60 },
         "bannerHighlight": { "type": "string", "minLength": 1, "maxLength": 60 },
         "bannerSubtitle": { "type": "string", "minLength": 1, "maxLength": 100 },
         "bannerDescription": { "type": "string", "minLength": 1, "maxLength": 300 },
         "bannerImageUrl": { "type": "string", "maxLength": 350000 },
+        "portfolioCtaText": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "contactCtaText": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "skillsHeading": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "portfolioHeading": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "portfolioSubheading": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "aboutTitle": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "aboutDescription": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "aboutImageUrl": { "type": "string", "maxLength": 350000 },
+        "quickCard1Title": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "quickCard1Subtitle": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "quickCard2Title": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "quickCard2Subtitle": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "quickCard3Title": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "quickCard3Subtitle": { "type": "string", "minLength": 1, "maxLength": 120 },
         "whatsappNumber": { "type": "string", "minLength": 7, "maxLength": 20, "pattern": "^[0-9+\\-\\s]{7,20}$" },
         "whatsappGreeting": { "type": "string", "minLength": 1, "maxLength": 160 },
         "telegramGroupUrl": { "type": "string", "maxLength": 240 },
@@ -21,6 +36,10 @@
         "youtubeUrl": { "type": "string", "maxLength": 240 },
         "githubUrl": { "type": "string", "maxLength": 240 },
         "linkedinUrl": { "type": "string", "maxLength": 240 },
+        "footerRightsText": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "footerCreditText": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "privacyPolicyText": { "type": "string", "minLength": 1, "maxLength": 800 },
+        "termsText": { "type": "string", "minLength": 1, "maxLength": 800 },
         "updatedAt": { "type": "string", "format": "date-time" },
         "updatedBy": { "type": "string", "minLength": 1, "maxLength": 128 }
       },
@@ -28,12 +47,27 @@
         "brandName",
         "brandSubtitle",
         "logoUrl",
+        "hireButtonText",
         "availabilityText",
         "bannerGreeting",
         "bannerHighlight",
         "bannerSubtitle",
         "bannerDescription",
         "bannerImageUrl",
+        "portfolioCtaText",
+        "contactCtaText",
+        "skillsHeading",
+        "portfolioHeading",
+        "portfolioSubheading",
+        "aboutTitle",
+        "aboutDescription",
+        "aboutImageUrl",
+        "quickCard1Title",
+        "quickCard1Subtitle",
+        "quickCard2Title",
+        "quickCard2Subtitle",
+        "quickCard3Title",
+        "quickCard3Subtitle",
         "whatsappNumber",
         "whatsappGreeting",
         "telegramGroupUrl",
@@ -41,9 +75,28 @@
         "youtubeUrl",
         "githubUrl",
         "linkedinUrl",
+        "footerRightsText",
+        "footerCreditText",
+        "privacyPolicyText",
+        "termsText",
         "updatedAt",
         "updatedBy"
       ]
+    },
+    "Skill": {
+      "title": "Skill",
+      "description": "Developer skill badge displayed in My Skills section.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "role": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "iconKey": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "order": { "type": "number" },
+        "authorId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "role", "iconKey", "order", "authorId", "createdAt", "updatedAt"]
     },
     "Project": {
       "title": "Project",
@@ -96,7 +149,11 @@
   "firestore": {
     "/siteConfig/{configId}": {
       "schema": { "$ref": "#/entities/SiteConfig" },
-      "description": "Singleton public site configuration document (configId = 'main') writable only by verified Admin."
+      "description": "Singleton public A-to-Z site configuration document (configId = 'main')."
+    },
+    "/skills/{skillId}": {
+      "schema": { "$ref": "#/entities/Skill" },
+      "description": "Real-time managed developer skills publicly readable and admin-writable."
     },
     "/projects/{projectId}": {
       "schema": { "$ref": "#/entities/Project" },

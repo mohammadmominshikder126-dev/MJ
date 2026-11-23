@@ -1,4 +1,5 @@
 import React from 'react';
+import { Code2 } from 'lucide-react';
 
 export function MjLogoMark({ className = 'w-11 h-11' }: { className?: string }) {
   return (
@@ -112,8 +113,58 @@ export function SkillIcon({ id }: { id: string }) {
           />
         </svg>
       );
+    case 'typescript':
+      return (
+        <svg viewBox="0 0 48 48" className="w-11 h-11 mx-auto drop-shadow-[0_6px_14px_rgba(49,120,198,0.35)]" aria-hidden="true">
+          <rect x="6" y="6" width="36" height="36" rx="5" fill="#3178C6" />
+          <path
+            fill="#FFFFFF"
+            d="M21 23h-4.5v13h-3.4V23H8.6v-3H21v3zm14.6 8.8c0 2.9-2.2 4.6-5.5 4.6-2.3 0-4.3-.8-5.4-1.9l1.7-2.4c1 .9 2.3 1.5 3.6 1.5 1.4 0 2.2-.6 2.2-1.5 0-1-.7-1.4-2.6-2.1-2.5-.9-4.3-2-4.3-4.6 0-2.7 2.1-4.5 5.2-4.5 2.1 0 3.7.6 4.8 1.5l-1.5 2.4c-.9-.7-2-1.1-3.1-1.1-1.2 0-1.9.5-1.9 1.3 0 .9.7 1.3 2.5 1.9 2.7 1 4.3 2.1 4.3 4.9z"
+          />
+        </svg>
+      );
+    case 'nextjs':
+      return (
+        <svg viewBox="0 0 48 48" className="w-11 h-11 mx-auto" aria-hidden="true">
+          <circle cx="24" cy="24" r="18" fill="#111827" stroke="#E5E7EB" strokeWidth="1.5" />
+          <path d="M17 31V17l16 18" stroke="#FFFFFF" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M31 17v10" stroke="#FFFFFF" strokeWidth="2.8" strokeLinecap="round" />
+        </svg>
+      );
+    case 'nodejs':
+      return (
+        <svg viewBox="0 0 48 48" className="w-11 h-11 mx-auto" aria-hidden="true">
+          <path fill="#539E43" d="M24 5l16 9.2v19.6L24 43 8 33.8V14.2L24 5z" />
+          <text x="24" y="28" textAnchor="middle" fill="#FFFFFF" fontSize="12" fontWeight="800">
+            JS
+          </text>
+        </svg>
+      );
+    case 'wordpress':
+      return (
+        <svg viewBox="0 0 48 48" className="w-11 h-11 mx-auto" aria-hidden="true">
+          <circle cx="24" cy="24" r="18" fill="#21759B" />
+          <text x="24" y="30" textAnchor="middle" fill="#FFFFFF" fontSize="19" fontWeight="800">
+            W
+          </text>
+        </svg>
+      );
+    case 'figma':
+      return (
+        <svg viewBox="0 0 48 48" className="w-11 h-11 mx-auto" aria-hidden="true">
+          <rect x="14" y="6" width="10" height="12" rx="5" fill="#F24E1E" />
+          <rect x="24" y="6" width="10" height="12" rx="5" fill="#FF7262" />
+          <rect x="14" y="18" width="10" height="12" rx="5" fill="#A259FF" />
+          <circle cx="29" cy="24" r="5" fill="#1ABCFE" />
+          <rect x="14" y="30" width="10" height="12" rx="5" fill="#0ACF83" />
+        </svg>
+      );
     default:
-      return null;
+      return (
+        <div className="w-11 h-11 mx-auto rounded-xl bg-gradient-to-br from-[#6366f1]/30 to-[#a855f7]/30 border border-[#818cf8]/50 grid place-items-center text-[#93c5fd]">
+          <Code2 className="w-6 h-6" />
+        </div>
+      );
   }
 }
 
