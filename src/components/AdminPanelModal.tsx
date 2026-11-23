@@ -40,7 +40,7 @@ import {
   SiteConfig,
   SKILL_ICON_OPTIONS,
   SkillItem,
-} from '../data/portfolioData';
+} from '../lib/portfolioData';
 import {
   ADMIN_EMAIL,
   auth,

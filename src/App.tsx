@@ -44,7 +44,7 @@ import {
   ProjectItem,
   SiteConfig,
   SkillItem,
-} from './data/portfolioData';
+} from './lib/portfolioData';
 import { ADMIN_EMAIL, auth, db, handleFirestoreError, OperationType } from './lib/firebase';
 
 export default function App() {

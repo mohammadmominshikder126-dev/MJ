@@ -12,7 +12,7 @@ import {
   isSafeHttpUrl,
   ProjectItem,
   SiteConfig,
-} from '../data/portfolioData';
+} from '../lib/portfolioData';
 import { ProjectBrowserPreview } from './ProjectPreviews';
 
 interface ProjectModalProps {
